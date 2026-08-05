@@ -1,0 +1,12 @@
+Drop PNG/WebP files into the matching role folder.
+
+Example:
+warrior/warrior.png
+warrior/warrior-iron.png
+warrior/warrior-iron-female.png
+warrior/warrior-steel.png
+warrior/warrior-knight.png
+warrior/warrior-crystal.png
+warrior/warrior-divine.png
+
+Read README.md for the complete automatic naming system.
