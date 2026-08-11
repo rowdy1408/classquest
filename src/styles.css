@@ -1943,3 +1943,135 @@ code { background: #edf3ff; color: #385a9e; padding: 4px 7px; border-radius: 7px
   color: #eaf0ff;
   background: rgba(68, 84, 154, .22);
 }
+
+/* Class import workflow */
+.class-toolbar-actions { align-items: center; justify-content: flex-end; }
+.class-import-help-trigger {
+  width: 40px;
+  height: 40px;
+  color: #d9d0ff;
+  background: rgba(138, 108, 255, .12);
+  border: 1px solid rgba(160, 136, 255, .25);
+}
+.class-import-stack, .import-help-stack { display: grid; gap: 16px; }
+.import-source-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .045);
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+.import-source-tabs button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 13px;
+  color: #b9c0d3;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.import-source-tabs button.active {
+  color: #fff;
+  background: rgba(138, 108, 255, .2);
+  border-color: rgba(160, 136, 255, .32);
+}
+.import-source-tabs .import-help-button { margin-left: auto; color: #d8d0ff; }
+.import-drop-zone {
+  min-height: 126px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 20px;
+  border: 1px dashed rgba(160, 136, 255, .42);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(138, 108, 255, .1), rgba(71, 113, 230, .06));
+}
+.import-drop-zone > span, .import-help-hero > span {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(145deg, #795fe5, #3e77df);
+  border-radius: 15px;
+  box-shadow: 0 12px 26px rgba(72, 76, 185, .24);
+}
+.import-drop-zone strong, .import-help-hero h3 { color: #f4f5ff; }
+.import-drop-zone p, .import-help-hero p { margin: 5px 0 0; color: #aeb6cb; font-size: 12px; }
+.google-sheet-import {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: end;
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid rgba(255, 255, 255, .085);
+}
+.google-sheet-import label { min-width: 0; }
+.google-sheet-import small { grid-column: 1 / -1; color: #9fa8bf; }
+.import-preview {
+  display: grid;
+  gap: 14px;
+  padding: 17px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid rgba(255, 255, 255, .085);
+}
+.import-preview-heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.import-preview-heading small { color: #a99aff; font-size: 9px; font-weight: 850; letter-spacing: 1px; }
+.import-preview-heading h3 { margin: 5px 0 0; color: #f5f6ff; }
+.import-preview-heading p { margin: 3px 0 0; color: #8993aa; font-size: 11px; }
+.import-preview-heading > span { padding: 6px 9px; border-radius: 999px; font-size: 10px; font-weight: 850; white-space: nowrap; }
+.import-preview-heading > span.valid { color: #9aebc5; background: rgba(36, 168, 120, .14); border: 1px solid rgba(36, 168, 120, .25); }
+.import-preview-heading > span.invalid { color: #ffacbb; background: rgba(239, 91, 114, .13); border: 1px solid rgba(239, 91, 114, .25); }
+.import-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+.import-summary-grid > div { padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, .055); border: 1px solid rgba(255, 255, 255, .08); }
+.import-summary-grid strong { display: block; color: #fff; font-size: 22px; font-variant-numeric: tabular-nums; }
+.import-summary-grid span { display: block; margin-top: 3px; color: #9ea7bc; font-size: 10px; }
+.import-issue-list { padding: 12px 14px; border-radius: 12px; }
+.import-issue-list strong { display: block; margin-bottom: 6px; }
+.import-issue-list p { margin: 4px 0; font-size: 12px; line-height: 1.45; }
+.import-issue-list.errors { color: #ffc0cb; background: rgba(239, 91, 114, .1); border: 1px solid rgba(239, 91, 114, .2); }
+.import-issue-list.warnings { color: #ffe1a4; background: rgba(217, 157, 47, .1); border: 1px solid rgba(217, 157, 47, .2); }
+.import-table-wrap { overflow-x: auto; }
+.import-table-wrap table { width: 100%; min-width: 560px; }
+.import-table-wrap th { color: #aeb6c9; background: rgba(255, 255, 255, .045); }
+.import-table-wrap td { color: #e8ebf5; }
+.import-table-wrap > small { display: block; margin-top: 8px; color: #929baf; }
+.import-actions { justify-content: flex-end; }
+.import-help-hero { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; background: rgba(138, 108, 255, .09); border: 1px solid rgba(160, 136, 255, .2); }
+.import-help-hero h3 { margin: 0; }
+.import-template-button { width: max-content; }
+.import-help-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.import-help-grid article { display: flex; gap: 11px; padding: 14px; border-radius: 14px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); }
+.import-help-grid article > b { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 9px; color: #fff; background: rgba(138, 108, 255, .28); }
+.import-help-grid strong { color: #f0f2fb; font-size: 12px; }
+.import-help-grid p { margin: 5px 0 0; color: #a0a9bd; font-size: 11px; line-height: 1.5; }
+.import-note-box { padding: 14px 16px; color: #d9e4ff; border-radius: 13px; background: rgba(71, 113, 230, .1); border: 1px solid rgba(104, 145, 255, .2); }
+.import-note-box.neutral { color: #ced3df; background: rgba(255, 255, 255, .035); border-color: rgba(255, 255, 255, .08); }
+.import-note-box p { margin: 5px 0 0; font-size: 12px; line-height: 1.55; }
+
+@media (max-width: 720px) {
+  .class-toolbar-actions { width: 100%; justify-content: stretch; }
+  .class-toolbar-actions .button { flex: 1; }
+  .import-source-tabs .import-help-button { width: 100%; margin-left: 0; }
+  .import-drop-zone { grid-template-columns: 1fr; text-align: center; }
+  .import-drop-zone > span { margin: 0 auto; }
+  .google-sheet-import { grid-template-columns: 1fr; }
+  .import-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .import-help-grid { grid-template-columns: 1fr; }
+  .import-preview-heading, .import-help-hero { align-items: flex-start; flex-direction: column; }
+}

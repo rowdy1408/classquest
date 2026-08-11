@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { CalendarDays, ChevronRight, Plus, School, Trash2, Users } from '../../icons';
+import { CalendarDays, ChevronRight, HelpCircle, Plus, School, Trash2, Upload, Users } from '../../icons';
 import { Link } from 'react-router-dom';
 import ClickableSchedule from '../../components/ClickableSchedule';
+import ClassImportModal, { ClassImportHelpModal } from '../../components/ClassImportModal';
 import Modal from '../../components/Modal';
 import { useApp } from '../../context/AppContext';
 
@@ -39,8 +40,10 @@ function makeEmptyForm() {
 }
 
 export default function ClassesPage() {
-  const { data, currentTeacher, addClass, deleteClass } = useApp();
+  const { data, currentTeacher, addClass, importClassBundle, deleteClass } = useApp();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [form, setForm] = useState(() => makeEmptyForm());
   const [error, setError] = useState('');
   const classes = data.classes.filter((item) => item.teacherId === currentTeacher.id);
@@ -134,7 +137,11 @@ export default function ClassesPage() {
           <h2>Các lớp của bạn</h2>
           <p>Tạo thông tin lớp, lịch học và ngày kiểm tra trong cùng một bước. Quest Map sẽ được tạo tự động.</p>
         </div>
-        <button className="button primary" onClick={openCreate}><Plus size={18} /> Tạo lớp</button>
+        <div className="button-row wrap class-toolbar-actions">
+          <button className="button secondary" onClick={() => setImportOpen(true)}><Upload size={18} /> Nhập từ file</button>
+          <button className="icon-button class-import-help-trigger" onClick={() => setHelpOpen(true)} aria-label="Cách tạo file nhập lớp" title="Cách tạo file"><HelpCircle size={18} /></button>
+          <button className="button primary" onClick={openCreate}><Plus size={18} /> Tạo lớp</button>
+        </div>
       </div>
 
       <div className="class-card-grid">
@@ -241,6 +248,9 @@ export default function ClassesPage() {
           </div>
         </form>
       </Modal>
+
+      <ClassImportModal open={importOpen} onClose={() => setImportOpen(false)} onImport={importClassBundle} onHelp={() => setHelpOpen(true)} />
+      <ClassImportHelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }

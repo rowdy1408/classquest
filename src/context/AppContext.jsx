@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { defaultData, roleCatalog } from '../data/defaultData';
 import { tierRequiredLevels } from '../data/skillTreeData';
+import { makeStarterRules, STARTER_CONTENT_VERSION, starterShopItems } from '../data/starterContent';
 import { loadAppData, loadSession, resetStorage, saveAppData, saveSession } from '../utils/storage';
 import { MAX_CHARACTER_LEVEL } from '../utils/characterSkins';
 import {
@@ -28,6 +29,29 @@ const AppContext = createContext(null);
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const cloneDefault = () => JSON.parse(JSON.stringify(defaultData));
 const dayIndex = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+
+function usernameBase(value) {
+  return String(value || 'student')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 24) || 'student';
+}
+
+function uniqueUsername(preferred, name, used) {
+  const base = usernameBase(preferred || name);
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${base.slice(0, 20)}-${suffix}`;
+    suffix += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
 
 function localDayKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
@@ -100,11 +124,31 @@ function applyXpChange(student, change) {
 
 function normalizeData(raw, fallback) {
   const source = raw && typeof raw === 'object' ? raw : fallback;
+  const classes = (source.classes || []).map((klass) => ({ sessionCount: 16, meetingSlots: [], sessionDates: [], ...klass }));
+  const needsStarterMigration = Number(source.starterContentVersion || 0) < STARTER_CONTENT_VERSION;
+  const existingRules = source.rules || [];
+  const migratedRules = needsStarterMigration
+    ? [
+        ...existingRules,
+        ...classes.flatMap((klass) => {
+          const titles = new Set(existingRules.filter((rule) => rule.classId === klass.id).map((rule) => rule.title));
+          return makeStarterRules(klass.id).filter((rule) => !titles.has(rule.title));
+        }),
+      ]
+    : existingRules;
+  const existingShopItems = source.shopItems || [];
+  const migratedShopItems = needsStarterMigration
+    ? [
+        ...existingShopItems,
+        ...starterShopItems.filter((starter) => !existingShopItems.some((item) => item.id === starter.id || item.name === starter.name)),
+      ]
+    : existingShopItems;
   return {
     ...fallback,
     ...source,
+    starterContentVersion: STARTER_CONTENT_VERSION,
     teachers: source.teachers || fallback.teachers,
-    classes: (source.classes || []).map((klass) => ({ sessionCount: 16, meetingSlots: [], ...klass })),
+    classes,
     students: (source.students || []).map((student) => {
       const role = roleCatalog[student.role] || roleCatalog.Explorer;
       const level = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(student.level) || 1));
@@ -119,7 +163,7 @@ function normalizeData(raw, fallback) {
       };
     }),
     groups: source.groups || [],
-    rules: source.rules || [],
+    rules: migratedRules,
     tests: source.tests || [],
     questNodes: (source.questNodes || []).map((node) => ({
       assignmentInstructions: node.description || '',
@@ -131,7 +175,7 @@ function normalizeData(raw, fallback) {
       ...node,
     })),
     pointLogs: source.pointLogs || [],
-    shopItems: source.shopItems || [],
+    shopItems: migratedShopItems,
     purchases: (source.purchases || []).map((purchase) => ({ lastUsedAt: '', ...purchase })),
     skillUses: source.skillUses || [],
     submissions: (source.submissions || []).map((submission) => ({
@@ -268,8 +312,10 @@ function formatLocalDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-function buildMeetingDates(startDate, count, meetingSlots = []) {
+function buildMeetingDates(startDate, count, meetingSlots = [], sessionDates = []) {
   const total = Math.max(1, Number(count) || 1);
+  const exactDates = (Array.isArray(sessionDates) ? sessionDates : []).filter(Boolean).slice(0, total);
+  if (exactDates.length === total) return exactDates;
   const base = parseLocalDate(startDate || formatLocalDate(new Date()));
   const meetingDays = [...new Set(meetingSlots.map((slot) => dayIndex[slot.day]).filter((value) => Number.isInteger(value)))].sort((a, b) => a - b);
   const dates = [];
@@ -411,7 +457,7 @@ function syncClassQuestMapState(current, classId, classPatch = {}) {
     sessionCount: Math.max(1, Number(classPatch.sessionCount ?? currentClass.sessionCount) || 1),
   };
   const total = nextClass.sessionCount;
-  const dates = buildMeetingDates(nextClass.startDate, total, nextClass.meetingSlots);
+  const dates = buildMeetingDates(nextClass.startDate, total, nextClass.meetingSlots, nextClass.sessionDates);
   const existingNodes = current.questNodes
     .filter((node) => node.classId === classId)
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
@@ -495,7 +541,7 @@ function rebuildClassQuestMapState(current, classId, classPatch = {}) {
     sessionCount: Math.max(1, Number(classPatch.sessionCount ?? currentClass.sessionCount) || 1),
   };
   const total = nextClass.sessionCount;
-  const dates = buildMeetingDates(nextClass.startDate, total, nextClass.meetingSlots);
+  const dates = buildMeetingDates(nextClass.startDate, total, nextClass.meetingSlots, nextClass.sessionDates);
   const classTests = current.tests.filter((test) => test.classId === classId);
   const assignments = buildTestAssignments(dates, classTests);
   const existingNodes = current.questNodes
@@ -837,6 +883,7 @@ export function AppProvider({ children }) {
       teacherId: session.userId,
       ...classPayload,
       meetingSlots: classPayload.meetingSlots || [],
+      sessionDates: classPayload.sessionDates || [],
       sessionCount: Math.max(1, Number(classPayload.sessionCount) || 16),
     };
     const createdTests = initialTests.map((test) => ({
@@ -854,8 +901,87 @@ export function AppProvider({ children }) {
         ...current,
         classes: [...current.classes, created],
         tests: [...current.tests, ...createdTests],
+        rules: [...current.rules, ...makeStarterRules(created.id)],
       };
       return rebuildClassQuestMapState(next, created.id);
+    });
+    return created;
+  };
+
+  const importClassBundle = ({ classInfo, sessions = [], tests = [], students = [] }) => {
+    const created = {
+      id: makeId('class'),
+      teacherId: session.userId,
+      name: classInfo.name,
+      code: classInfo.code || '',
+      level: classInfo.level || '',
+      startDate: classInfo.startDate || '',
+      sessionCount: Math.max(1, Number(classInfo.sessionCount) || 1),
+      description: classInfo.description || '',
+      meetingSlots: classInfo.meetingSlots || [],
+      sessionDates: classInfo.sessionDates || [],
+      importedAt: new Date().toISOString(),
+    };
+    const createdTests = tests.map((test) => ({
+      id: makeId('test'),
+      classId: created.id,
+      title: test.title || (test.type === 'final' ? 'Kiểm tra cuối khóa' : 'Kiểm tra tiến độ'),
+      date: test.date || '',
+      type: test.type === 'final' ? 'final' : 'progress',
+      maxScore: Math.max(1, Number(test.maxScore) || 100),
+      description: test.description || '',
+    }));
+
+    setData((current) => {
+      const usedUsernames = new Set(current.students.map((student) => String(student.username || '').toLowerCase()).filter(Boolean));
+      const usedEmails = new Set(current.students.map((student) => String(student.email || '').toLowerCase()).filter(Boolean));
+      const createdStudents = students.map((student) => {
+        const role = roleCatalog[student.role] || roleCatalog.Explorer;
+        const username = uniqueUsername(student.username, student.name, usedUsernames);
+        let email = String(student.email || '').toLowerCase();
+        if (!email || usedEmails.has(email)) email = `${username}@classquest.local`;
+        usedEmails.add(email);
+        return {
+          id: makeId('student'),
+          classIds: [created.id],
+          name: student.name,
+          email,
+          username,
+          role: student.role || 'Explorer',
+          gender: student.gender || 'male',
+          avatar: role.icon,
+          level: 1,
+          xp: 0,
+          xpToNext: 100,
+          gold: 50,
+          hp: role.maxHp,
+          mana: role.maxMana,
+          groupId: '',
+          note: student.note || '',
+          unlockedSkillIds: [],
+        };
+      });
+      const next = {
+        ...current,
+        classes: [...current.classes, created],
+        tests: [...current.tests, ...createdTests],
+        rules: [...current.rules, ...makeStarterRules(created.id)],
+        students: [...current.students, ...createdStudents],
+      };
+      const rebuilt = rebuildClassQuestMapState(next, created.id);
+      return {
+        ...rebuilt,
+        questNodes: rebuilt.questNodes.map((node) => {
+          if (node.classId !== created.id || node.type !== 'lesson') return node;
+          const importedSession = sessions.find((session) => Number(session.order) === Number(node.order));
+          if (!importedSession) return node;
+          return {
+            ...node,
+            title: importedSession.title || node.title,
+            description: importedSession.description || node.description,
+          };
+        }),
+      };
     });
     return created;
   };
@@ -1250,6 +1376,7 @@ export function AppProvider({ children }) {
       logout,
       resetDemo,
       addClass,
+      importClassBundle,
       updateClass,
       deleteClass,
       addStudent,

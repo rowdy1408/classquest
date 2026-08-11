@@ -1,5 +1,6 @@
 import { classBaseStats, classSkillThemes, maxLevel, skillTrees, tierRequiredLevels } from './skillTreeData';
 import { localizeSkillTree } from './skillTreeVi';
+import { STARTER_CONTENT_VERSION, starterShopItems } from './starterContent';
 
 export const SKILL_UNLOCK_LEVELS = Object.values(tierRequiredLevels);
 export const MAX_SKILL_TREE_LEVEL = maxLevel;
@@ -33,6 +34,7 @@ export const roleCatalog = Object.fromEntries(roleDefinitions.map(({ key, classI
 // Public builds start empty. Existing teacher data is loaded from Firestore;
 // new teachers create their first class after sign-in.
 export const defaultData = {
+  starterContentVersion: STARTER_CONTENT_VERSION,
   teachers: [],
   classes: [],
   students: [],
@@ -41,7 +43,7 @@ export const defaultData = {
   tests: [],
   questNodes: [],
   pointLogs: [],
-  shopItems: [],
+  shopItems: starterShopItems,
   purchases: [],
   skillUses: [],
   submissions: [],

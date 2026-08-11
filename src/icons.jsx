@@ -5,7 +5,8 @@ const glyphs = {
   LogOut: '↪', RotateCcw: '↻', ArrowRight: '→', ArrowUp: '↑', GraduationCap: '🎓', ShieldCheck: '🛡', Sparkles: '✦',
   Mail: '✉', KeyRound: '🔑', ArrowLeft: '←', UserRound: '●', CalendarDays: '▦', CheckCircle2: '✓',
   Coins: '◉', School: '🏫', ScrollText: '▤', ShieldAlert: '⚠', Users: '👥', ChevronRight: '›', Edit3: '✎',
-  Save: '▣', Power: '⏻', ShoppingBag: '🛍', PackageOpen: '◫', CircleUserRound: '◉', Home: '⌂', BookOpenCheck: '▥'
+  Save: '▣', Power: '⏻', ShoppingBag: '🛍', PackageOpen: '◫', CircleUserRound: '◉', Home: '⌂', BookOpenCheck: '▥',
+  Upload: '⇧', HelpCircle: '?', Download: '⇩', FileSpreadsheet: '▦'
 };
 
 function makeIcon(name) {
@@ -50,3 +51,7 @@ export const PackageOpen = makeIcon('PackageOpen');
 export const CircleUserRound = makeIcon('CircleUserRound');
 export const Home = makeIcon('Home');
 export const BookOpenCheck = makeIcon('BookOpenCheck');
+export const Upload = makeIcon('Upload');
+export const HelpCircle = makeIcon('HelpCircle');
+export const Download = makeIcon('Download');
+export const FileSpreadsheet = makeIcon('FileSpreadsheet');
