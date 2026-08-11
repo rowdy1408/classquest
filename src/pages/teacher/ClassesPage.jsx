@@ -18,6 +18,13 @@ function makeTest(type = 'progress', order = 1) {
   };
 }
 
+function orderTests(tests) {
+  return [
+    ...tests.filter((test) => test.type === 'progress'),
+    ...tests.filter((test) => test.type === 'final'),
+  ];
+}
+
 function makeEmptyForm() {
   return {
     name: '',
@@ -52,7 +59,7 @@ export default function ClassesPage() {
   const updateTest = (tempId, patch) => {
     setForm((current) => ({
       ...current,
-      tests: current.tests.map((test) => (test.tempId === tempId ? { ...test, ...patch } : test)),
+      tests: orderTests(current.tests.map((test) => (test.tempId === tempId ? { ...test, ...patch } : test))),
     }));
   };
 
@@ -63,12 +70,12 @@ export default function ClassesPage() {
   const addProgressTest = () => {
     setForm((current) => {
       const progressCount = current.tests.filter((test) => test.type === 'progress').length;
-      return { ...current, tests: [...current.tests, makeTest('progress', progressCount + 1)] };
+      return { ...current, tests: orderTests([...current.tests, makeTest('progress', progressCount + 1)]) };
     });
   };
 
   const addFinalTest = () => {
-    setForm((current) => ({ ...current, tests: [...current.tests, makeTest('final', 1)] }));
+    setForm((current) => ({ ...current, tests: orderTests([...current.tests, makeTest('final', 1)]) }));
   };
 
   const submit = (event) => {
@@ -111,13 +118,14 @@ export default function ClassesPage() {
       sessionCount: Math.max(1, Number(form.sessionCount) || 1),
       description: form.description,
       meetingSlots: form.meetingSlots,
-      initialTests: form.tests.map(({ tempId, ...test }) => ({ ...test, maxScore: Number(test.maxScore) || 100 })),
+      initialTests: orderTests(form.tests).map(({ tempId, ...test }) => ({ ...test, maxScore: Number(test.maxScore) || 100 })),
     });
     setForm(makeEmptyForm());
     setOpen(false);
   };
 
   const hasFinalTest = form.tests.some((test) => test.type === 'final');
+  const orderedTests = orderTests(form.tests);
 
   return (
     <>
@@ -160,30 +168,36 @@ export default function ClassesPage() {
           <section className="create-form-section span-2">
             <div className="create-section-heading">
               <span className="create-step">1</span>
-              <div><small>THÔNG TIN LỚP</small><h3>Thông tin khóa học</h3><p>Các thông tin này sẽ hiển thị ở trang giáo viên và học viên.</p></div>
+              <div><small>THIẾT LẬP LỚP HỌC</small><h3>Thông tin và lịch học</h3><p>Nhập ba nội dung chính để hệ thống tự tạo Quest Map theo đúng lịch.</p></div>
             </div>
-            <div className="form-grid nested-form-grid">
-              <label className="span-2"><span>Tên lớp</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
-              <label><span>Mã lớp</span><input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="AA1-E01" /></label>
-              <label><span>Level</span><input value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} placeholder="A1 → A2" /></label>
-              <label><span>Ngày khai giảng</span><input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required /></label>
-              <label><span>Tổng số buổi</span><input min="1" type="number" value={form.sessionCount} onChange={(e) => setForm({ ...form, sessionCount: e.target.value })} required /><small className="field-help">Hệ thống tạo đúng số node tương ứng trên Quest Map.</small></label>
-              <label className="span-2"><span>Mô tả</span><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows="3" placeholder="Trọng tâm khóa học, nhóm học viên, mục tiêu chính…" /></label>
+            <div className="form-grid nested-form-grid create-class-core-grid">
+              <label className="span-2 create-core-field"><span>Tên lớp</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ví dụ: IELTS Foundation – Bảo" required /></label>
+              <label className="create-core-field"><span>Số buổi học</span><input min="1" type="number" value={form.sessionCount} onChange={(e) => setForm({ ...form, sessionCount: e.target.value })} required /><small className="field-help">Mỗi buổi tương ứng với một node trên Quest Map.</small></label>
+              <label className="create-core-field"><span>Ngày bắt đầu</span><input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required /><small className="field-help">Ngày buổi học đầu tiên của lớp.</small></label>
             </div>
-          </section>
 
-          <section className="create-form-section span-2">
-            <div className="create-section-heading">
-              <span className="create-step">2</span>
-              <div><small>LỊCH HỌC HẰNG TUẦN</small><h3>Chọn lịch học cố định</h3><p>Chọn lịch 2–4–6, 3–5–7, cuối tuần hoặc tự thiết lập.</p></div>
+            <div className="create-schedule-block">
+              <div className="create-subheading">
+                <div><small>LỊCH HỌC</small><strong>Chọn ngày và giờ học cố định</strong></div>
+                <span>Bắt buộc</span>
+              </div>
+              <ClickableSchedule value={form.meetingSlots} onChange={(meetingSlots) => setForm({ ...form, meetingSlots })} />
             </div>
-            <ClickableSchedule value={form.meetingSlots} onChange={(meetingSlots) => setForm({ ...form, meetingSlots })} />
+
+            <details className="create-optional-details">
+              <summary>Thêm mã lớp, level và mô tả <span>Không bắt buộc</span></summary>
+              <div className="form-grid nested-form-grid">
+                <label><span>Mã lớp</span><input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="AA1-E01" /></label>
+                <label><span>Level</span><input value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} placeholder="A1 → A2" /></label>
+                <label className="span-2"><span>Mô tả</span><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows="3" placeholder="Trọng tâm khóa học, nhóm học viên, mục tiêu chính…" /></label>
+              </div>
+            </details>
           </section>
 
           <section className="create-form-section span-2">
             <div className="create-section-heading test-heading-row">
               <div className="heading-with-step">
-                <span className="create-step">3</span>
+                <span className="create-step">2</span>
                 <div><small>LỊCH BOSS</small><h3>Thêm ngày kiểm tra tiến độ và cuối khóa</h3><p>Các node Boss sẽ tự động được đặt khi tạo lớp.</p></div>
               </div>
               <div className="button-row wrap">
@@ -193,7 +207,7 @@ export default function ClassesPage() {
             </div>
 
             <div className="create-test-list">
-              {form.tests.map((test, index) => (
+              {orderedTests.map((test) => (
                 <article className={`create-test-card ${test.type}`} key={test.tempId}>
                   <div className="test-card-toolbar">
                     <span className="test-kind-badge">{test.type === 'final' ? '👑 FINAL BOSS' : '⚔️ MINI BOSS'}</span>
@@ -215,7 +229,7 @@ export default function ClassesPage() {
           {error && <div className="form-error span-2">⚠️ {error}</div>}
 
           <div className="create-form-summary span-2">
-            <div><strong>{form.sessionCount || 0}</strong><span>Node nhiệm vụ</span></div>
+            <div><strong>{form.sessionCount || 0}</strong><span>Buổi học</span></div>
             <div><strong>{form.meetingSlots.length}</strong><span>Ca học/tuần</span></div>
             <div><strong>{form.tests.filter((test) => test.type === 'progress').length}</strong><span>Mini Boss</span></div>
             <div><strong>{form.tests.filter((test) => test.type === 'final').length}</strong><span>Final Boss</span></div>
