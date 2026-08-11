@@ -5,6 +5,8 @@ import ClickableSchedule from '../../components/ClickableSchedule';
 import ClassImportModal, { ClassImportHelpModal } from '../../components/ClassImportModal';
 import Modal from '../../components/Modal';
 import { useApp } from '../../context/AppContext';
+import { validateTestSchedule } from '../../utils/classValidation';
+import { buildMeetingDates } from '../../utils/questSchedule';
 
 const makeTempId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -108,8 +110,15 @@ export default function ClassesPage() {
       .map((test) => test.date)
       .sort()
       .at(-1);
-    if (finalTest && latestProgressDate && finalTest.date < latestProgressDate) {
-      setError('Ngày kiểm tra cuối khóa phải bằng hoặc sau bài kiểm tra tiến độ cuối cùng.');
+    if (finalTest && latestProgressDate && finalTest.date <= latestProgressDate) {
+      setError('Ngày kiểm tra cuối khóa phải sau bài kiểm tra tiến độ cuối cùng.');
+      return;
+    }
+
+    const lessonDates = buildMeetingDates(form.startDate, form.sessionCount, form.meetingSlots);
+    const scheduleErrors = validateTestSchedule({ tests: form.tests, lessonDates, startDate: form.startDate });
+    if (scheduleErrors.length) {
+      setError(scheduleErrors[0]);
       return;
     }
 
@@ -152,7 +161,7 @@ export default function ClassesPage() {
             <article className="class-card" key={klass.id}>
               <div className="class-card-top">
                 <span className="class-emblem"><School /></span>
-                <button className="icon-button danger" onClick={() => window.confirm(`Xóa lớp ${klass.name}?`) && deleteClass(klass.id)}><Trash2 size={17} /></button>
+                <button className="icon-button danger" aria-label={`Xóa lớp ${klass.name}`} onClick={() => window.confirm(`Xóa lớp ${klass.name}?`) && deleteClass(klass.id)}><Trash2 size={17} /></button>
               </div>
               <small>{klass.code || 'CHƯA CÓ MÃ'} · {klass.level || 'Chưa có level'}</small>
               <h3>{klass.name}</h3>
@@ -218,7 +227,7 @@ export default function ClassesPage() {
                 <article className={`create-test-card ${test.type}`} key={test.tempId}>
                   <div className="test-card-toolbar">
                     <span className="test-kind-badge">{test.type === 'final' ? '👑 FINAL BOSS' : '⚔️ MINI BOSS'}</span>
-                    <button type="button" className="icon-button danger" onClick={() => removeTest(test.tempId)} aria-label="Remove test"><Trash2 size={16} /></button>
+                    <button type="button" className="icon-button danger" onClick={() => removeTest(test.tempId)} aria-label={`Xóa ${test.title}`}><Trash2 size={16} /></button>
                   </div>
                   <div className="form-grid nested-form-grid compact-grid">
                     <label><span>Tên bài kiểm tra</span><input value={test.title} onChange={(e) => updateTest(test.tempId, { title: e.target.value })} required /></label>

@@ -1,4 +1,5 @@
 import readExcelFile from 'read-excel-file/browser';
+import { sortTests, validateTestSchedule } from './classValidation.js';
 
 const sheetAliases = {
   classInfo: ['thong tin lop', 'class info', 'lop hoc'],
@@ -189,6 +190,10 @@ export async function parseClassWorkbook(fileOrBlob) {
     const title = String(cell(row, ['Tên', 'Tên buổi / bài test', 'Title']) || '').trim();
     if (type === 'lesson') {
       const order = Number(cell(row, ['STT', 'Buổi số', 'Order']) || sessions.length + 1);
+      if (!Number.isInteger(order) || order < 1) {
+        errors.push(`Sheet BUOI_HOC_VA_TEST, dòng ${row.rowNumber}: STT phải là số nguyên dương.`);
+        return;
+      }
       const start = normalizeTime(cell(row, ['Giờ bắt đầu', 'Start time']));
       const end = normalizeTime(cell(row, ['Giờ kết thúc', 'End time']));
       if ((start && !end) || (!start && end) || (start && end && start >= end)) {
@@ -218,6 +223,10 @@ export async function parseClassWorkbook(fileOrBlob) {
   if (!sessions.length) errors.push('Sheet BUOI_HOC_VA_TEST cần có ít nhất một dòng BUOI_HOC.');
   const duplicateOrders = sessions.filter((session, index) => sessions.findIndex((item) => item.order === session.order) !== index);
   if (duplicateOrders.length) errors.push('STT buổi học bị trùng. Mỗi buổi cần một STT riêng.');
+  if (sessions.some((session, index) => session.order !== index + 1)) errors.push('STT buổi học phải liên tục từ 1 đến hết khóa.');
+  if (sessions.some((session, index) => index > 0 && session.date < sessions[index - 1].date)) {
+    errors.push('Ngày học phải tăng dần theo STT buổi học.');
+  }
   const duplicateDates = sessions.filter((session, index) => sessions.findIndex((item) => item.date === session.date && item.start === session.start) !== index);
   if (duplicateDates.length) warnings.push('Có nhiều buổi trùng ngày và giờ. Hãy kiểm tra lại trước khi nhập.');
   if (!sessions.some((session) => session.start && session.end)) warnings.push('File chưa có giờ học; hệ thống vẫn nhập đúng ngày từng buổi nhưng lịch học hằng tuần sẽ để trống.');
@@ -246,11 +255,14 @@ export async function parseClassWorkbook(fileOrBlob) {
       note: String(cell(row, ['Ghi chú', 'Note']) || '').trim(),
     });
   });
+  const duplicateEmails = students.filter((student, index) => student.email && students.findIndex((item) => item.email === student.email) !== index);
+  if (duplicateEmails.length) errors.push('Email học viên bị trùng trong sheet HOC_VIEN.');
+  const duplicateUsernames = students.filter((student, index) => student.username && students.findIndex((item) => item.username === student.username) !== index);
+  if (duplicateUsernames.length) errors.push('Tên đăng nhập bị trùng trong sheet HOC_VIEN.');
   if (!students.length) warnings.push('File chưa có học viên. Bạn vẫn có thể tạo lớp và thêm học viên sau.');
 
-  const finalTests = tests.filter((test) => test.type === 'final');
-  if (finalTests.length > 1) errors.push('Chỉ được có tối đa một FINAL_TEST.');
-  tests.sort((a, b) => (a.type === 'final') - (b.type === 'final') || a.date.localeCompare(b.date));
+  errors.push(...validateTestSchedule({ tests, lessonDates: sessions.map((session) => session.date), startDate: classInfo.startDate }));
+  const orderedTests = sortTests(tests);
 
   return {
     errors,
@@ -261,7 +273,7 @@ export async function parseClassWorkbook(fileOrBlob) {
       meetingSlots: deriveMeetingSlots(sessions),
     },
     sessions,
-    tests,
+    tests: orderedTests,
     students,
   };
 }

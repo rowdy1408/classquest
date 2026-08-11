@@ -62,7 +62,7 @@ export default function StudentDashboard() {
           <Link className="text-link" to="/student/group">Xem biệt đội <ArrowRight size={15} /></Link>
         </article>
 
-        <Link to="/student/skills" className="dashboard-tile purple-tile"><Sparkles /><div><strong>Cây kỹ năng</strong><span>Chọn nhánh phát triển và mở kỹ năng đến cấp 30.</span></div></Link>
+        <Link to="/student/skills" className="dashboard-tile purple-tile"><Sparkles /><div><strong>Cây kỹ năng</strong><span>Mở 9 kỹ năng được rải đều đến cấp 40.</span></div></Link>
         <Link to="/student/shop" className="dashboard-tile gold-tile"><ShoppingBag /><div><strong>Cửa hàng kỹ năng</strong><span>Dùng Gold mua kỹ năng và kích hoạt mỗi ngày một lần.</span></div></Link>
         <Link to="/student/profile" className="dashboard-tile blue-tile"><CheckCircle2 /><div><strong>Hồ sơ nhân vật</strong><span>Xem cấp giáp, chỉ số và kho kỹ năng.</span></div></Link>
         <div className="dashboard-tile green-tile"><Coins /><div><strong>{dailyReadyCount} kỹ năng sẵn sàng hôm nay</strong><span>Em đang sở hữu {purchases.length} kỹ năng vĩnh viễn.</span></div></div>

@@ -29,7 +29,7 @@ npm run dev
 1. Bật Google và Email/Password trong Firebase Authentication.
 2. Thêm domain GitHub Pages vào Authentication → Settings → Authorized domains.
 3. Áp dụng ClassQuest Rules từ gói phát hành riêng vào Firestore Rules hiện tại rồi Publish.
-4. Áp dụng Storage Rules từ gói phát hành riêng nếu dùng Firebase Storage.
+4. Áp dụng `firebase/storage.rules` trước khi bật nộp bài bằng hình ảnh. Ảnh mới được lưu trong Firebase Storage; Firestore chỉ giữ URL và metadata nhỏ.
 5. Tạo lời mời giáo viên trong `mhpTeacherInvites` theo hướng dẫn tại `firebase/FIREBASE_SETUP.md`.
 6. Với học viên cũ, mở tab Học viên và chọn **Kích hoạt** một lần. Học viên mới được tạo tài khoản online tự động.
 

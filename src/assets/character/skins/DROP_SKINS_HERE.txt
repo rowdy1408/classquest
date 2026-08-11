@@ -1,2 +1,0 @@
-Put your PNG/WebP character skin files into the matching role folder.
-Read README.md in this folder for naming and URL examples.

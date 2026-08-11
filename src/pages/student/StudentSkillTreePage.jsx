@@ -10,6 +10,11 @@ function earnedSkillPoints(level) {
 }
 
 function usageWindowStart(skill, now = new Date()) {
+  if (skill.usesPerDay || (!skill.usesPerWeek && !skill.usesPerMonth && !skill.usesPerTerm)) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
   if (skill.usesPerWeek) {
     const start = new Date(now);
     start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
@@ -29,11 +34,12 @@ function usageStatus(entries, studentId, skill) {
     const usedAt = new Date(entry.usedAt);
     return !Number.isNaN(usedAt.getTime()) && usedAt >= start && usedAt <= now;
   }).length;
-  const limit = Number(skill.usesPerWeek || skill.usesPerMonth || skill.usesPerTerm || 1);
+  const limit = Number(skill.usesPerDay || skill.usesPerWeek || skill.usesPerMonth || skill.usesPerTerm || 1);
   return { count, limit, exhausted: count >= limit };
 }
 
 function limitLabel(skill) {
+  if (skill.usesPerDay) return `${skill.usesPerDay} lần/ngày`;
   if (skill.usesPerWeek) return `${skill.usesPerWeek} lần/tuần`;
   if (skill.usesPerMonth) return `${skill.usesPerMonth} lần/tháng`;
   return `${skill.usesPerTerm || 1} lần/khóa`;
@@ -129,7 +135,7 @@ export default function StudentSkillTreePage() {
           <div className="skill-point-summary">
             <span>✨ <strong>{availablePoints}</strong> Điểm kỹ năng còn lại</span>
             <span>🔷 <strong>{currentStudent.mana}</strong>/{role.maxMana} Mana</span>
-            <span>🔓 <strong>{unlockedIds.length}</strong>/12 kỹ năng đã mở</span>
+            <span>🔓 <strong>{unlockedIds.length}</strong>/9 kỹ năng đã mở</span>
           </div>
         </div>
       </section>
@@ -161,7 +167,7 @@ export default function StudentSkillTreePage() {
         ))}
       </section>
 
-      <section className="ultimate-skill-section">
+      {ultimates.length > 0 && <section className="ultimate-skill-section">
         <div className="ultimate-heading">
           <div><small>BẬC 4 · MỞ Ở CẤP 25</small><h2>👑 Kỹ năng Tối thượng</h2></div>
           <p>Chọn duy nhất một kỹ năng Tối thượng cho nhân vật.</p>
@@ -180,10 +186,10 @@ export default function StudentSkillTreePage() {
             />
           ))}
         </div>
-      </section>
+      </section>}
 
       <div className="info-banner">
-        Nhận Điểm kỹ năng ở cấp 1, 8, 15 và 25. Giáp mới mở ở cấp 4, 10, 16, 22 và 28. Cấp tối đa của nhân vật là 30.
+        Mở một kỹ năng mới ở cấp 1, 5, 10, 15, 20, 25, 30, 35 và 40. Mỗi kỹ năng dùng một lần mỗi ngày. Giáp mới mở ở cấp 10, 20, 30 và 40.
       </div>
     </div>
   );

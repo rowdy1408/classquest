@@ -45,7 +45,7 @@ export default function QuestSubmissionModal({ open, node, existingSubmission, o
       workLink: existingSubmission?.workLink || '',
       responseText: existingSubmission?.responseText || '',
       studentNote: existingSubmission?.studentNote || '',
-      images: existingSubmission?.images || [],
+      images: (existingSubmission?.images || []).map((image) => ({ ...image, dataUrl: image.dataUrl || image.url || '' })),
     });
     setMessage('');
   }, [open, existingSubmission]);
@@ -143,7 +143,7 @@ export default function QuestSubmissionModal({ open, node, existingSubmission, o
           <div className="evidence-grid">
             {form.images.map((image) => (
               <figure key={image.id} className="evidence-thumb">
-                <img src={image.dataUrl} alt={image.name} />
+                <img src={image.dataUrl || image.url} alt={image.name} />
                 <figcaption>{image.name}</figcaption>
                 <button type="button" className="mini-button danger" onClick={() => setForm({ ...form, images: form.images.filter((item) => item.id !== image.id) })}>Xóa</button>
               </figure>

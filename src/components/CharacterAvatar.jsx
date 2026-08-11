@@ -52,7 +52,8 @@ export default function CharacterAvatar({
             onError={handleError}
             draggable="false"
             decoding="async"
-            data-character-source="assets/character"
+            loading="lazy"
+            data-character-source="assets/skins"
           />
         ) : (
           <span className="character-skin-fallback" aria-label={`${resolvedRole} fallback avatar`}>{resolvedFallback}</span>

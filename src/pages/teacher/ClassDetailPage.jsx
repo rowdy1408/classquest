@@ -6,6 +6,8 @@ import Modal from '../../components/Modal';
 import QuestMap from '../../components/QuestMap';
 import CharacterAvatar from '../../components/CharacterAvatar';
 import { useApp } from '../../context/AppContext';
+import { sortTests } from '../../utils/classValidation';
+import { MAX_CHARACTER_LEVEL } from '../../utils/characterSkins';
 
 const tabs = [
   ['Overview', 'Tổng quan'],
@@ -69,7 +71,7 @@ export default function ClassDetailPage() {
   const classStudents = data.students.filter((student) => student.classIds.includes(classId));
   const classGroups = data.groups.filter((group) => group.classId === classId);
   const classRules = data.rules.filter((rule) => rule.classId === classId);
-  const classTests = data.tests.filter((test) => test.classId === classId).sort((a, b) => a.date.localeCompare(b.date));
+  const classTests = sortTests(data.tests.filter((test) => test.classId === classId));
   const classNodes = data.questNodes.filter((node) => node.classId === classId);
   const classSubmissions = data.submissions.filter((submission) => classNodes.some((node) => node.id === submission.nodeId));
 
@@ -91,7 +93,7 @@ export default function ClassDetailPage() {
       {activeTab === 'Overview' && <OverviewTab klass={klass} tests={classTests} nodes={classNodes} updateClass={app.updateClass} />}
       {activeTab === 'Students' && <StudentsTab students={classStudents} roleCatalog={roleCatalog} onAdd={() => { setEditingStudent(null); setModal('student'); }} onEdit={(student) => { setEditingStudent(student); setModal('student'); }} onActivate={app.activateStudentAccount} onDelete={app.deleteStudent} />}
       {activeTab === 'Groups' && <GroupsTab groups={classGroups} students={classStudents} onAdd={() => setModal('group')} onUpdate={app.updateGroup} onDelete={app.deleteGroup} />}
-      {activeTab === 'Points' && <PointsTab students={classStudents} logs={data.pointLogs.filter((log) => log.classId === classId)} onApply={() => setModal('points')} />}
+      {activeTab === 'Points' && <PointsTab students={classStudents} roleCatalog={roleCatalog} logs={data.pointLogs.filter((log) => log.classId === classId)} onApply={() => setModal('points')} />}
       {activeTab === 'Rules' && <RulesTab rules={classRules} onAdd={() => setModal('rule')} onDelete={app.deleteRule} />}
       {activeTab === 'Tests' && <TestsTab tests={classTests} onAdd={() => setModal('test')} onDelete={app.deleteTest} />}
       {activeTab === 'Quest Map' && <QuestMapTab nodes={classNodes} sessionCount={klass.sessionCount} onGenerate={() => setModal('generate')} onEdit={(node) => { setEditingNode(node); setModal('node'); }} submissions={data.submissions} />}
@@ -108,9 +110,10 @@ function OverviewTab({ klass, tests, nodes, updateClass }) {
   const save = (event) => {
     event.preventDefault();
     const nextCount = Math.max(1, Number(form.sessionCount) || 1);
-    if (nextCount < nodes.length) {
+    const currentLessonCount = nodes.filter((node) => node.type === 'lesson').length;
+    if (nextCount < currentLessonCount) {
       const confirmed = window.confirm(
-        `Giảm khóa học từ ${nodes.length} còn ${nextCount} buổi? Các node vượt quá số buổi mới và bài nộp liên quan sẽ bị xóa.`,
+        `Giảm khóa học từ ${currentLessonCount} còn ${nextCount} buổi? Các Lesson vượt quá số buổi mới và bài nộp liên quan sẽ bị xóa.`,
       );
       if (!confirmed) return;
     }
@@ -193,7 +196,7 @@ function StudentsTab({ students, roleCatalog, onAdd, onEdit, onActivate, onDelet
       <div className="panel-header"><div><small>DANH SÁCH LỚP</small><h2>Học viên</h2></div><button className="button primary" onClick={onAdd}><Plus size={17} /> Thêm học viên</button></div>
       {message && <div className="account-sync-message" role="status">{message}</div>}
       <div className="table-wrap"><table><thead><tr><th>Học viên</th><th>Đăng nhập</th><th>Nhân vật</th><th>Cấp</th><th>XP</th><th>Gold</th><th></th></tr></thead><tbody>
-        {students.map((student) => <tr key={student.id}><td><div className="student-cell"><CharacterAvatar student={student} className="teacher-table-avatar" /><div><strong>{student.name}</strong><small>{student.email}</small></div></div></td><td><code>{student.username}</code><span className={`account-status ${student.authUid ? 'ready' : 'pending'}`}>{student.authUid ? 'Online' : 'Chưa kích hoạt'}</span></td><td>{roleCatalog[student.role]?.icon} {roleCatalog[student.role]?.displayName || student.role}</td><td>{student.level}</td><td>{student.xp}/{student.xpToNext}</td><td>🪙 {student.gold}</td><td><div className="button-row">{!student.authUid && <button className="mini-button" disabled={busyId === student.id} onClick={() => activate(student)}>{busyId === student.id ? 'Đang tạo…' : 'Kích hoạt'}</button>}<button className="icon-button" title="Sửa học viên" onClick={() => onEdit(student)}><Edit3 size={16} /></button><button className="icon-button danger" disabled={busyId === student.id} onClick={() => remove(student)}><Trash2 size={16} /></button></div></td></tr>)}
+        {students.map((student) => <tr key={student.id}><td><div className="student-cell"><CharacterAvatar student={student} className="teacher-table-avatar" /><div><strong>{student.name}</strong><small>{student.email}</small></div></div></td><td><code>{student.username}</code><span className={`account-status ${student.authUid ? 'ready' : 'pending'}`}>{student.authUid ? 'Online' : 'Chưa kích hoạt'}</span></td><td>{roleCatalog[student.role]?.icon} {roleCatalog[student.role]?.displayName || student.role}</td><td>{student.level}</td><td>{student.xp}/{student.xpToNext}</td><td>🪙 {student.gold}</td><td><div className="button-row">{!student.authUid && <button className="mini-button" disabled={busyId === student.id} onClick={() => activate(student)}>{busyId === student.id ? 'Đang tạo…' : 'Kích hoạt'}</button>}<button className="icon-button" aria-label={`Sửa ${student.name}`} onClick={() => onEdit(student)}><Edit3 size={16} /></button><button className="icon-button danger" aria-label={`Xóa ${student.name}`} disabled={busyId === student.id} onClick={() => remove(student)}><Trash2 size={16} /></button></div></td></tr>)}
       </tbody></table></div>
       {!students.length && <div className="empty-state compact">Chưa có học viên.</div>}
     </div>
@@ -208,13 +211,13 @@ function GroupsTab({ groups, students, onAdd, onUpdate, onDelete }) {
   return (
     <div className="panel">
       <div className="panel-header"><div><small>BIỆT ĐỘI</small><h2>Nhóm trong lớp</h2></div><button className="button primary" onClick={onAdd}><Plus size={17} /> Tạo biệt đội</button></div>
-      <div className="group-grid">{groups.map((group) => <article className="group-card" key={group.id}><div className="group-card-title"><span>🛡️</span><div><h3>{group.name}</h3><p>{group.motto}</p></div><button className="icon-button danger" onClick={() => onDelete(group.id)}><Trash2 size={16} /></button></div><div className="member-checklist">{students.map((student) => <label key={student.id} className={group.memberIds.includes(student.id) ? 'checked' : ''}><input type="checkbox" checked={group.memberIds.includes(student.id)} onChange={() => toggle(group, student.id)} /><span className="checklist-student"><CharacterAvatar student={student} className="checklist-character-avatar" /> {student.name}</span></label>)}</div></article>)}</div>
+      <div className="group-grid">{groups.map((group) => <article className="group-card" key={group.id}><div className="group-card-title"><span>🛡️</span><div><h3>{group.name}</h3><p>{group.motto}</p></div><button className="icon-button danger" aria-label={`Xóa biệt đội ${group.name}`} onClick={() => onDelete(group.id)}><Trash2 size={16} /></button></div><div className="member-checklist">{students.map((student) => <label key={student.id} className={group.memberIds.includes(student.id) ? 'checked' : ''}><input type="checkbox" checked={group.memberIds.includes(student.id)} onChange={() => toggle(group, student.id)} /><span className="checklist-student"><CharacterAvatar student={student} className="checklist-character-avatar" /> {student.name}</span></label>)}</div></article>)}</div>
       {!groups.length && <div className="empty-state compact">Hãy tạo biệt đội đầu tiên.</div>}
     </div>
   );
 }
 
-function PointsTab({ students, logs, onApply }) {
+function PointsTab({ students, roleCatalog, logs, onApply }) {
   return (
     <div className="two-column-grid">
       <div className="panel"><div className="panel-header"><div><small>THAO TÁC NHANH</small><h2>Cộng hoặc trừ điểm</h2></div><button className="button primary" onClick={onApply}><Plus size={17} /> Điều chỉnh điểm</button></div><div className="student-score-list">{students.map((student) => <div className="score-row" key={student.id}><CharacterAvatar student={student} className="score-character-avatar" /><div><strong>{student.name}</strong><small>{roleCatalog[student.role]?.displayName || student.role} · Cấp {student.level}</small></div><b>⭐ {student.xp}</b><b>🪙 {student.gold}</b></div>)}</div></div>
@@ -224,18 +227,20 @@ function PointsTab({ students, logs, onApply }) {
 }
 
 function RulesTab({ rules, onAdd, onDelete }) {
-  return <div className="panel"><div className="panel-header"><div><small>HỆ THỐNG ĐIỂM</small><h2>Quy tắc thưởng phạt</h2></div><button className="button primary" onClick={onAdd}><Plus size={17} /> Thêm quy tắc</button></div><div className="rule-grid">{rules.map((rule) => <article className={`rule-card ${rule.type}`} key={rule.id}><div><span>{rule.type === 'reward' ? '🏆 Khen thưởng' : '⚠️ Trừ điểm'}</span><h3>{rule.title}</h3><p>{rule.description}</p></div><div className="rule-values"><strong>{rule.points > 0 ? '+' : ''}{rule.points} XP</strong><strong>{rule.gold > 0 ? '+' : ''}{rule.gold} Gold</strong><button className="icon-button danger" onClick={() => onDelete(rule.id)}><Trash2 size={16} /></button></div></article>)}</div></div>;
+  return <div className="panel"><div className="panel-header"><div><small>HỆ THỐNG ĐIỂM</small><h2>Quy tắc thưởng phạt</h2></div><button className="button primary" onClick={onAdd}><Plus size={17} /> Thêm quy tắc</button></div><div className="rule-grid">{rules.map((rule) => <article className={`rule-card ${rule.type}`} key={rule.id}><div><span>{rule.type === 'reward' ? '🏆 Khen thưởng' : '⚠️ Trừ điểm'}</span><h3>{rule.title}</h3><p>{rule.description}</p></div><div className="rule-values"><strong>{rule.points > 0 ? '+' : ''}{rule.points} XP</strong><strong>{rule.gold > 0 ? '+' : ''}{rule.gold} Gold</strong><button className="icon-button danger" aria-label={`Xóa ${rule.title}`} onClick={() => onDelete(rule.id)}><Trash2 size={16} /></button></div></article>)}</div></div>;
 }
 
 function TestsTab({ tests, onAdd, onDelete }) {
-  return <div className="panel"><div className="panel-header"><div><small>LỊCH BOSS</small><h2>Kiểm tra & đánh giá</h2><p>Thêm ngày chính xác rồi đồng bộ Quest Map để đặt Mini Boss và Final Boss.</p></div><button className="button primary" onClick={onAdd}><Plus size={17} /> Thêm bài kiểm tra</button></div><div className="timeline-list">{tests.map((test) => <div className={`timeline-item ${test.type}`} key={test.id}><span className="timeline-dot">{test.type === 'final' ? '👑' : '⚔️'}</span><div><small>{formatDate(test.date)} · {test.type === 'final' ? 'cuối khóa' : 'tiến độ'}</small><h3>{test.title}</h3><p>{test.description}</p><span>Điểm tối đa: {test.maxScore}</span></div><button className="icon-button danger" onClick={() => onDelete(test.id)}><Trash2 size={16} /></button></div>)}</div>{!tests.length && <div className="empty-state compact">Chưa có bài kiểm tra.</div>}</div>;
+  return <div className="panel"><div className="panel-header"><div><small>LỊCH BOSS</small><h2>Kiểm tra & đánh giá</h2><p>Thêm ngày chính xác rồi đồng bộ Quest Map để đặt Mini Boss và Final Boss.</p></div><button className="button primary" onClick={onAdd}><Plus size={17} /> Thêm bài kiểm tra</button></div><div className="timeline-list">{tests.map((test) => <div className={`timeline-item ${test.type}`} key={test.id}><span className="timeline-dot">{test.type === 'final' ? '👑' : '⚔️'}</span><div><small>{formatDate(test.date)} · {test.type === 'final' ? 'cuối khóa' : 'tiến độ'}</small><h3>{test.title}</h3><p>{test.description}</p><span>Điểm tối đa: {test.maxScore}</span></div><button className="icon-button danger" aria-label={`Xóa ${test.title}`} onClick={() => onDelete(test.id)}><Trash2 size={16} /></button></div>)}</div>{!tests.length && <div className="empty-state compact">Chưa có bài kiểm tra.</div>}</div>;
 }
 
 function QuestMapTab({ nodes, sessionCount, onGenerate, onEdit, submissions }) {
   const closed = nodes.filter((node) => node.submissionLocked || (node.lockAfterDeadline && node.deadline && new Date(node.deadline).getTime() < Date.now())).length;
-  const expected = Math.max(1, Number(sessionCount) || 1);
-  const synced = nodes.length === expected;
-  return <div className="panel quest-panel"><div className="panel-header"><div><small>LỘ TRÌNH RPG</small><h2>Quest Map</h2><p>{nodes.length}/{expected} node buổi học · {closed} cửa sổ nộp bài đã đóng</p><span className={`sync-status ${synced ? 'synced' : 'syncing'}`}>{synced ? '✓ Đã tự động khớp với tổng số buổi' : 'Đang cập nhật node theo số buổi…'}</span></div><div className="button-row"><button className="button secondary" onClick={onGenerate}>Đồng bộ ngày & Boss</button></div></div><QuestMap nodes={nodes} submissions={submissions} teacherMode onEdit={onEdit} /></div>;
+  const expectedLessons = Math.max(1, Number(sessionCount) || 1);
+  const lessonCount = nodes.filter((node) => node.type === 'lesson').length;
+  const bossCount = nodes.length - lessonCount;
+  const synced = lessonCount === expectedLessons;
+  return <div className="panel quest-panel"><div className="panel-header"><div><small>LỘ TRÌNH RPG</small><h2>Quest Map</h2><p>{lessonCount}/{expectedLessons} buổi học · {bossCount} Boss riêng · {closed} cửa sổ nộp bài đã đóng</p><span className={`sync-status ${synced ? 'synced' : 'syncing'}`}>{synced ? '✓ Số Lesson đã khớp; Boss không chiếm buổi học' : 'Đang cập nhật node theo số buổi…'}</span></div><div className="button-row"><button className="button secondary" onClick={onGenerate}>Đồng bộ ngày & Boss</button></div></div><QuestMap nodes={nodes} submissions={submissions} teacherMode onEdit={onEdit} /></div>;
 }
 
 function SubmissionsTab({ submissions, students, nodes, onReview }) {
@@ -278,7 +283,7 @@ function SubmissionsTab({ submissions, students, nodes, onReview }) {
               {selected.workLink && <section><small>ĐƯỜNG DẪN BÀI LÀM</small><a className="evidence-link" href={selected.workLink} target="_blank" rel="noreferrer">Mở đường dẫn đã nộp ↗</a></section>}
               {selected.responseText && <section><small>CÂU TRẢ LỜI</small><p className="response-paper">{selected.responseText}</p></section>}
               {selected.studentNote && <section><small>GHI CHÚ CỦA HỌC VIÊN</small><p>{selected.studentNote}</p></section>}
-              {selected.images?.length > 0 && <section><small>HÌNH ẢNH MINH CHỨNG</small><div className="review-image-grid">{selected.images.map((image) => <a key={image.id} href={image.dataUrl} target="_blank" rel="noreferrer"><img src={image.dataUrl} alt={image.name} /><span>{image.name}</span></a>)}</div></section>}
+              {selected.images?.length > 0 && <section><small>HÌNH ẢNH MINH CHỨNG</small><div className="review-image-grid">{selected.images.map((image) => <a key={image.id} href={image.url || image.dataUrl} target="_blank" rel="noreferrer"><img src={image.url || image.dataUrl} alt={image.name} loading="lazy" /><span>{image.name}</span></a>)}</div></section>}
               {!selected.workLink && !selected.responseText && !selected.images?.length && <div className="empty-state compact">Bài nộp này chưa có minh chứng.</div>}
 
               <label><span>Nhận xét của giáo viên</span><textarea rows="4" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Nêu phần đã đạt hoặc nội dung cần sửa." /></label>
@@ -295,10 +300,10 @@ function ClassModal({ modal, setModal, classId, students, roleCatalog, app, edit
   const close = () => setModal(null);
   if (!modal) return null;
 
-  if (modal === 'student') return <StudentFormModal open onClose={close} editingStudent={editingStudent} students={app.data.students} roleCatalog={roleCatalog} onSubmit={async (form) => { const level = Math.max(1, Math.min(30, Number(form.level) || 1)); const payload = { name: form.name, email: form.email, username: form.username, password: form.password, role: form.role, gender: form.gender, level, xpToNext: Math.max(100, level * 100), note: form.note || '' }; if (editingStudent) { app.updateStudent(editingStudent.id, payload); close(); return { ok: true }; } const result = await app.addStudent({ ...payload, classIds: [classId] }); if (result.ok) close(); return result; }} />;
+  if (modal === 'student') return <StudentFormModal open onClose={close} editingStudent={editingStudent} students={app.data.students} roleCatalog={roleCatalog} onSubmit={async (form) => { const level = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(form.level) || 1)); const payload = { name: form.name, email: form.email, username: form.username, password: form.password, role: form.role, gender: form.gender, level, xpToNext: Math.max(100, level * 100), note: form.note || '' }; if (editingStudent) { app.updateStudent(editingStudent.id, payload); close(); return { ok: true }; } const result = await app.addStudent({ ...payload, classIds: [classId] }); if (result.ok) close(); return result; }} />;
   if (modal === 'group') return <SimpleFormModal title="Tạo biệt đội" open onClose={close} initial={{ name: '', motto: '' }} fields={[['name','Tên biệt đội','text'],['motto','Khẩu hiệu','text']]} onSubmit={(form) => { app.addGroup({ ...form, classId }); close(); }} />;
   if (modal === 'rule') return <SimpleFormModal title="Thêm quy tắc lớp" open onClose={close} initial={{ type: 'reward', title: '', points: 5, gold: 5, description: '' }} fields={[['type','Loại','select',[{ value: 'reward', label: 'Khen thưởng' }, { value: 'penalty', label: 'Trừ điểm' }]],['title','Tên quy tắc','text'],['points','Thay đổi XP','number'],['gold','Thay đổi Gold','number'],['description','Mô tả','textarea']]} onSubmit={(form) => { app.addRule({ ...form, classId, points: Number(form.points), gold: Number(form.gold) }); close(); }} />;
-  if (modal === 'test') return <SimpleFormModal title="Thêm ngày kiểm tra" open onClose={close} initial={{ title: '', date: '', type: 'progress', maxScore: 100, description: '' }} fields={[['title','Tên bài kiểm tra','text'],['date','Ngày kiểm tra','date'],['type','Loại Boss','select',[{ value: 'progress', label: 'Kiểm tra tiến độ' }, { value: 'final', label: 'Kiểm tra cuối khóa' }]],['maxScore','Điểm tối đa','number'],['description','Nội dung / hình thức','textarea']]} onSubmit={(form) => { app.addTest({ ...form, classId, maxScore: Number(form.maxScore) }); close(); }} />;
+  if (modal === 'test') return <SimpleFormModal title="Thêm ngày kiểm tra" open onClose={close} initial={{ title: '', date: '', type: 'progress', maxScore: 100, description: '' }} fields={[['title','Tên bài kiểm tra','text'],['date','Ngày kiểm tra','date'],['type','Loại Boss','select',[{ value: 'progress', label: 'Kiểm tra tiến độ' }, { value: 'final', label: 'Kiểm tra cuối khóa' }]],['maxScore','Điểm tối đa','number'],['description','Nội dung / hình thức','textarea']]} onSubmit={(form) => { const result = app.addTest({ ...form, classId, maxScore: Number(form.maxScore) }); if (result.ok) close(); return result; }} />;
   if (modal === 'generate') return <SimpleFormModal title="Đồng bộ Quest Map theo lịch lớp và ngày kiểm tra" open onClose={close} initial={{ sessionCount: klass.sessionCount || 16, startDate: klass.startDate || '' }} fields={[['sessionCount','Tổng số buổi học','number'],['startDate','Ngày khai giảng','date']]} onSubmit={(form) => { app.generateQuestMap({ ...form, classId }); close(); }} />;
   if (modal === 'points') return <SimpleFormModal title="Cộng hoặc trừ điểm" open onClose={close} initial={{ studentId: students[0]?.id || '', points: 0, gold: 0, reason: '' }} fields={[['studentId','Học viên','select',students.map((student) => ({ value: student.id, label: student.name }))],['points','Thay đổi XP','number'],['gold','Thay đổi Gold','number'],['reason','Lý do','text']]} onSubmit={(form) => { app.applyPoints({ ...form, classId, points: Number(form.points), gold: Number(form.gold) }); close(); }} />;
   if (modal === 'node') {
@@ -392,7 +397,7 @@ function StudentFormModal({ open, onClose, editingStudent, students, roleCatalog
 
         <label><span>Hệ nhân vật</span><select value={form.role || 'Explorer'} onChange={(event) => setForm({ ...form, role: event.target.value })}>{Object.keys(roleCatalog).map((role) => <option key={role} value={role}>{roleCatalog[role].displayName}</option>)}</select></label>
         <label><span>Skin nhân vật</span><select value={form.gender || 'male'} onChange={(event) => setForm({ ...form, gender: event.target.value })}><option value="male">Nam</option><option value="female">Nữ</option></select></label>
-        <label><span>Cấp nhân vật</span><input type="number" min="1" max="30" value={form.level || 1} onChange={(event) => setForm({ ...form, level: event.target.value })} /></label>
+        <label><span>Cấp nhân vật</span><input type="number" min="1" max={MAX_CHARACTER_LEVEL} value={form.level || 1} onChange={(event) => setForm({ ...form, level: event.target.value })} /></label>
         <label className="span-2"><span>Ghi chú của giáo viên</span><textarea value={form.note || ''} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
         {error && <div className="error-message span-2" role="alert">{error}</div>}
         <div className="form-actions span-2"><button className="button primary" type="submit" disabled={busy}><Save size={16} /> {busy ? 'Đang tạo tài khoản…' : editingStudent ? 'Lưu học viên' : 'Tạo tài khoản học viên'}</button></div>
@@ -403,10 +408,11 @@ function StudentFormModal({ open, onClose, editingStudent, students, roleCatalog
 
 function SimpleFormModal({ title, open, onClose, initial, fields, onSubmit, wide = false }) {
   const [form, setForm] = useState(initial);
-  useEffect(() => setForm(initial), [initial]);
+  const [error, setError] = useState('');
+  useEffect(() => { setForm(initial); setError(''); }, [initial]);
   return (
     <Modal open={open} title={title} onClose={onClose} wide={wide}>
-      <form className="form-grid" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }}>
+      <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); setError(''); const result = await onSubmit(form); if (result?.ok === false) setError(result.message); }}>
         {fields.map(([key, label, type, options]) => {
           const isWide = ['textarea', 'textarea-large', 'checkbox'].includes(type);
           return (
@@ -434,6 +440,7 @@ function SimpleFormModal({ title, open, onClose, initial, fields, onSubmit, wide
             </label>
           );
         })}
+        {error && <div className="error-message span-2" role="alert">{error}</div>}
         <div className="form-actions span-2"><button className="button ghost" type="button" onClick={onClose}>Hủy</button><button className="button primary" type="submit">Lưu</button></div>
       </form>
     </Modal>

@@ -38,7 +38,7 @@ function getSubmissionLock(node) {
 export default function QuestMap({ nodes, submissions = [], studentId, onSubmit, teacherMode = false, onEdit, onDelete }) {
   const [selected, setSelected] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const sorted = [...nodes].sort((a, b) => a.order - b.order);
+  const sorted = [...nodes].sort((a, b) => Number(a.sortOrder || a.order || 0) - Number(b.sortOrder || b.order || 0));
   const submission = selected && studentId ? submissions.find((item) => item.studentId === studentId && item.nodeId === selected.id) : null;
   const lockState = selected ? getSubmissionLock(selected) : { locked: false, reason: '' };
 

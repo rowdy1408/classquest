@@ -737,9 +737,9 @@ code { background: #edf3ff; color: #385a9e; padding: 4px 7px; border-radius: 7px
   font-weight: 900;
   letter-spacing: .2px;
 }
-.armour-tier-badge.tier-iron { background: #6c7686; }
-.armour-tier-badge.tier-steel { background: #536b86; }
-.armour-tier-badge.tier-knight { background: #a96b31; }
+.armour-tier-badge.tier-base { background: #536b86; }
+.armour-tier-badge.tier-bronze { background: #9b6436; }
+.armour-tier-badge.tier-gold { color: #3d2a00; background: linear-gradient(90deg, #f1c64e, #d89b20); }
 .armour-tier-badge.tier-crystal { background: linear-gradient(90deg, #426de0, #8c4dd5); }
 .armour-tier-badge.tier-divine { background: linear-gradient(90deg, #c9921d, #6b4fd4); }
 

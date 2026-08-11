@@ -1,26 +1,36 @@
 import React, { useState } from 'react';
-import { Plus, ScrollText, Trash2 } from '../../icons';
+import { Edit3, Plus, ScrollText, Trash2 } from '../../icons';
 import Modal from '../../components/Modal';
 import { useApp } from '../../context/AppContext';
 
 const emptyForm = { classId: '', type: 'reward', title: '', points: 5, gold: 5, description: '' };
 
 export default function RulesPage() {
-  const { data, currentTeacher, addRule, deleteRule } = useApp();
+  const { data, currentTeacher, addRule, updateRule, deleteRule } = useApp();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState('');
   const classes = data.classes.filter((item) => item.teacherId === currentTeacher?.id);
   const classIds = classes.map((item) => item.id);
   const rules = data.rules.filter((rule) => classIds.includes(rule.classId));
 
   const openCreate = () => {
+    setEditingId('');
     setForm({ ...emptyForm, classId: classes[0]?.id || '' });
+    setOpen(true);
+  };
+
+  const openEdit = (rule) => {
+    setEditingId(rule.id);
+    setForm({ ...rule });
     setOpen(true);
   };
 
   const submit = (event) => {
     event.preventDefault();
-    addRule({ ...form, points: Number(form.points), gold: Number(form.gold) });
+    const payload = { ...form, points: Number(form.points), gold: Number(form.gold) };
+    if (editingId) updateRule(editingId, payload);
+    else addRule(payload);
     setOpen(false);
   };
 
@@ -36,7 +46,7 @@ export default function RulesPage() {
           return (
             <article className={`rule-card ${rule.type}`} key={rule.id}>
               <div><span><ScrollText size={15} /> {klass?.name}</span><h3>{rule.title}</h3><p>{rule.description}</p></div>
-              <div className="rule-values"><strong>{rule.points > 0 ? '+' : ''}{rule.points} XP</strong><strong>{rule.gold > 0 ? '+' : ''}{rule.gold} Gold</strong><button className="icon-button danger" onClick={() => deleteRule(rule.id)}><Trash2 size={16} /></button></div>
+              <div className="rule-values"><strong>{rule.points > 0 ? '+' : ''}{rule.points} XP</strong><strong>{rule.gold > 0 ? '+' : ''}{rule.gold} Gold</strong><button className="icon-button" aria-label={`Sửa ${rule.title}`} onClick={() => openEdit(rule)}><Edit3 size={16} /></button><button className="icon-button danger" aria-label={`Xóa ${rule.title}`} onClick={() => deleteRule(rule.id)}><Trash2 size={16} /></button></div>
             </article>
           );
         })}
@@ -44,7 +54,7 @@ export default function RulesPage() {
       {!classes.length && <div className="empty-state">Hãy tạo lớp đầu tiên. Bộ 8 quy tắc mẫu sẽ được thêm tự động.</div>}
       {!!classes.length && !rules.length && <div className="empty-state">Chưa có quy tắc. Chọn “Thêm quy tắc” để tạo quy tắc mới.</div>}
 
-      <Modal open={open} title="Thêm quy tắc" onClose={() => setOpen(false)}>
+      <Modal open={open} title={editingId ? 'Sửa quy tắc' : 'Thêm quy tắc'} onClose={() => setOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label className="span-2"><span>Lớp</span><select value={form.classId} onChange={(e) => setForm({ ...form, classId: e.target.value })}>{classes.map((klass) => <option value={klass.id} key={klass.id}>{klass.name}</option>)}</select></label>
           <label><span>Loại</span><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="reward">Khen thưởng</option><option value="penalty">Trừ điểm</option></select></label>
@@ -52,7 +62,7 @@ export default function RulesPage() {
           <label><span>Thay đổi XP</span><input type="number" value={form.points} onChange={(e) => setForm({ ...form, points: e.target.value })} /></label>
           <label><span>Thay đổi Gold</span><input type="number" value={form.gold} onChange={(e) => setForm({ ...form, gold: e.target.value })} /></label>
           <label className="span-2"><span>Mô tả</span><textarea rows="3" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
-          <div className="form-actions span-2"><button className="button ghost" type="button" onClick={() => setOpen(false)}>Hủy</button><button className="button primary">Lưu quy tắc</button></div>
+          <div className="form-actions span-2"><button className="button ghost" type="button" onClick={() => setOpen(false)}>Hủy</button><button className="button primary">{editingId ? 'Cập nhật quy tắc' : 'Lưu quy tắc'}</button></div>
         </form>
       </Modal>
     </>

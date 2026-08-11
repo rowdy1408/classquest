@@ -21,14 +21,17 @@ import {
   signOut,
 } from 'firebase/auth';
 import { deleteApp, initializeApp } from 'firebase/app';
+import { getDownloadURL, ref as storageRef, uploadString } from 'firebase/storage';
 import {
   firebaseAuth,
   firebaseConfig,
   firebaseConfigured,
   firebasePersistenceReady,
   firestore,
+  firebaseStorage,
   googleTeacherProvider,
 } from './firebaseClient';
+import { studentAuthEmail } from '../utils/identity';
 
 const USER_COLLECTION = 'mhpUsers';
 const CLASS_COLLECTION = 'mhpClasses';
@@ -111,8 +114,7 @@ export async function signOutFirebaseUser() {
 export async function signInStudentWithPassword(username, password) {
   if (!firebaseConfigured) throw new Error('Firebase chưa được cấu hình. Hãy liên hệ giáo viên.');
   await firebasePersistenceReady;
-  const normalized = String(username || '').trim().toLowerCase();
-  const email = normalized.includes('@') ? normalized : `${normalized}@classquest.local`;
+  const email = studentAuthEmail(username);
   const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
   const profile = await getUserProfile(credential.user);
   if (!profile || profile.role !== 'student' || profile.active !== true) {
@@ -130,12 +132,13 @@ export async function provisionStudentAccount(ownerId, student, password) {
   await setPersistence(secondaryAuth, inMemoryPersistence);
 
   try {
+    const authEmail = studentAuthEmail(student.username);
     let credential;
     try {
-      credential = await createUserWithEmailAndPassword(secondaryAuth, student.email, password);
+      credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, password);
     } catch (error) {
       if (error?.code !== 'auth/email-already-in-use') throw error;
-      credential = await signInWithEmailAndPassword(secondaryAuth, student.email, password);
+      credential = await signInWithEmailAndPassword(secondaryAuth, authEmail, password);
     }
 
     const authUid = credential.user.uid;
@@ -144,7 +147,8 @@ export async function provisionStudentAccount(ownerId, student, password) {
     if (existingProfile.exists()) {
       await setDoc(profileReference, {
         name: student.name,
-        email: student.email,
+        email: student.email || '',
+        authEmail,
         username: student.username,
         provider: 'password',
         active: true,
@@ -156,7 +160,8 @@ export async function provisionStudentAccount(ownerId, student, password) {
         ownerId,
         studentId: student.id,
         name: student.name,
-        email: student.email,
+        email: student.email || '',
+        authEmail,
         username: student.username,
         provider: 'password',
         active: true,
@@ -169,6 +174,45 @@ export async function provisionStudentAccount(ownerId, student, password) {
     try { await signOut(secondaryAuth); } catch { /* no active secondary session */ }
     await deleteApp(secondaryApp);
   }
+}
+
+function safeStorageSegment(value, fallback) {
+  return String(value || fallback).replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80);
+}
+
+export async function uploadSubmissionImages(ownerKey, submissionId, images = []) {
+  return Promise.all(images.map(async (image, index) => {
+    if (!image?.dataUrl || !String(image.dataUrl).startsWith('data:')) {
+      const { dataUrl, ...storedImage } = image || {};
+      return { ...storedImage, url: image?.url || dataUrl || '' };
+    }
+    const imageId = safeStorageSegment(image.id, `image-${index + 1}`);
+    const path = `mhpSubmissions/${safeStorageSegment(ownerKey, 'unknown')}/${safeStorageSegment(submissionId, 'submission')}/${imageId}.jpg`;
+    const reference = storageRef(firebaseStorage, path);
+    await uploadString(reference, image.dataUrl, 'data_url', { contentType: image.type || 'image/jpeg' });
+    const url = await getDownloadURL(reference);
+    return {
+      id: image.id || imageId,
+      name: image.name || `${imageId}.jpg`,
+      type: image.type || 'image/jpeg',
+      size: Number(image.size || 0),
+      storagePath: path,
+      url,
+    };
+  }));
+}
+
+export async function migrateWorkspaceSubmissionImages(ownerId, data) {
+  let changed = false;
+  const submissions = await Promise.all((data.submissions || []).map(async (submission) => {
+    if (!(submission.images || []).some((image) => String(image?.dataUrl || '').startsWith('data:'))) return submission;
+    changed = true;
+    return {
+      ...submission,
+      images: await uploadSubmissionImages(`${ownerId}/${submission.studentId}`, submission.id, submission.images),
+    };
+  }));
+  return changed ? { ...data, submissions } : data;
 }
 
 export async function deactivateStudentAccount(authUid, ownerId) {

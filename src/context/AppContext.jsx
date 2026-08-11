@@ -4,6 +4,8 @@ import { tierRequiredLevels } from '../data/skillTreeData';
 import { makeStarterRules, STARTER_CONTENT_VERSION, starterShopItems } from '../data/starterContent';
 import { loadAppData, loadSession, resetStorage, saveAppData, saveSession } from '../utils/storage';
 import { MAX_CHARACTER_LEVEL } from '../utils/characterSkins';
+import { buildMeetingDates, orderQuestNodes } from '../utils/questSchedule';
+import { sortTests, validateTestSchedule } from '../utils/classValidation';
 import {
   deactivateStudentAccount,
   friendlyFirebaseError,
@@ -11,6 +13,7 @@ import {
   getUserProfile,
   loadStudentView,
   loadOrCreateTeacherWorkspace,
+  migrateWorkspaceSubmissionImages,
   observeFirebaseUser,
   provisionStudentAccount,
   saveStudentActivity,
@@ -22,13 +25,13 @@ import {
   subscribeToTeacherStudentViews,
   subscribeToTeacherWorkspace,
   syncStudentViews,
+  uploadSubmissionImages,
 } from '../firebase/classquestCloud';
 
 const AppContext = createContext(null);
 
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const cloneDefault = () => JSON.parse(JSON.stringify(defaultData));
-const dayIndex = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
 
 function usernameBase(value) {
   return String(value || 'student')
@@ -77,6 +80,11 @@ function spentSkillPoints(role, unlockedSkillIds = []) {
 }
 
 function skillUsageWindowStart(skill, now = new Date()) {
+  if (skill.usesPerDay || (!skill.usesPerWeek && !skill.usesPerMonth && !skill.usesPerTerm)) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
   if (skill.usesPerWeek) {
     const start = new Date(now);
     const day = start.getDay();
@@ -89,7 +97,7 @@ function skillUsageWindowStart(skill, now = new Date()) {
 }
 
 function skillUsageLimit(skill) {
-  return Number(skill.usesPerWeek || skill.usesPerMonth || skill.usesPerTerm || 1);
+  return Number(skill.usesPerDay || skill.usesPerWeek || skill.usesPerMonth || skill.usesPerTerm || 1);
 }
 
 function countSkillUses(entries, studentId, skill, now = new Date()) {
@@ -299,61 +307,6 @@ function mergeStudentViewsIntoTeacherData(current, views) {
   return next;
 }
 
-function parseLocalDate(value) {
-  const [year, month, day] = (value || '').split('-').map(Number);
-  if (!year || !month || !day) return new Date();
-  return new Date(year, month - 1, day, 12, 0, 0, 0);
-}
-
-function formatLocalDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function buildMeetingDates(startDate, count, meetingSlots = [], sessionDates = []) {
-  const total = Math.max(1, Number(count) || 1);
-  const exactDates = (Array.isArray(sessionDates) ? sessionDates : []).filter(Boolean).slice(0, total);
-  if (exactDates.length === total) return exactDates;
-  const base = parseLocalDate(startDate || formatLocalDate(new Date()));
-  const meetingDays = [...new Set(meetingSlots.map((slot) => dayIndex[slot.day]).filter((value) => Number.isInteger(value)))].sort((a, b) => a - b);
-  const dates = [];
-
-  if (!meetingDays.length) {
-    for (let i = 0; i < total; i += 1) {
-      const date = new Date(base);
-      date.setDate(base.getDate() + i * 3);
-      dates.push(formatLocalDate(date));
-    }
-    return dates;
-  }
-
-  const cursor = new Date(base);
-  let safety = 0;
-  while (dates.length < total && safety < 1000) {
-    if (meetingDays.includes(cursor.getDay())) dates.push(formatLocalDate(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-    safety += 1;
-  }
-  return dates;
-}
-
-function closestAvailableIndex(dates, targetDate, used, maxIndex = dates.length - 1) {
-  const target = parseLocalDate(targetDate).getTime();
-  let best = -1;
-  let distance = Infinity;
-  dates.forEach((date, index) => {
-    if (index > maxIndex || used.has(index)) return;
-    const nextDistance = Math.abs(parseLocalDate(date).getTime() - target);
-    if (nextDistance < distance) {
-      distance = nextDistance;
-      best = index;
-    }
-  });
-  return best;
-}
-
 function createLessonNode(classId, order, date) {
   return {
     id: makeId('node'),
@@ -377,72 +330,27 @@ function createLessonNode(classId, order, date) {
   };
 }
 
-function buildTestAssignments(dates, tests) {
-  const assignments = new Map();
-  const used = new Set();
-  const sortedTests = [...tests].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  const progressTests = sortedTests.filter((test) => test.type === 'progress');
-  const finalTest = [...sortedTests].reverse().find((test) => test.type === 'final');
-
-  progressTests.forEach((test) => {
-    const maxIndex = finalTest ? Math.max(0, dates.length - 2) : dates.length - 1;
-    const index = closestAvailableIndex(dates, test.date, used, maxIndex);
-    if (index >= 0) {
-      assignments.set(index, test);
-      used.add(index);
-    }
-  });
-
-  if (finalTest && dates.length) {
-    const finalIndex = dates.length - 1;
-    assignments.set(finalIndex, finalTest);
-    used.add(finalIndex);
-  }
-
-  return assignments;
-}
-
-function mergeQuestNodeForSlot({ existingNode, classId, order, scheduledDate, test }) {
-  const isFinal = test?.type === 'final';
-  const isMiniboss = test?.type === 'progress';
-
-  if (test) {
-    const sameTest = existingNode?.testId === test.id;
-    const base = existingNode || createLessonNode(classId, order, scheduledDate);
-    return {
-      ...base,
-      classId,
-      order,
-      title: sameTest && existingNode?.title ? existingNode.title : test.title,
-      type: isFinal ? 'final' : 'miniboss',
-      date: test.date || scheduledDate || base.date || '',
-      xpReward: sameTest ? Number(base.xpReward || (isFinal ? 400 : 160)) : isFinal ? 400 : 160,
-      goldReward: sameTest ? Number(base.goldReward || (isFinal ? 100 : 40)) : isFinal ? 100 : 40,
-      description: sameTest && base.description ? base.description : isFinal ? 'Final course assessment.' : 'Progress assessment checkpoint.',
-      assignmentInstructions: sameTest && base.assignmentInstructions ? base.assignmentInstructions : test.description || '',
-      customPrompt: sameTest ? base.customPrompt || '' : '',
-      acceptedEvidence: sameTest && base.acceptedEvidence ? base.acceptedEvidence : 'Teacher-scored test evidence',
-      deadline: sameTest && base.deadline ? base.deadline : test.date ? `${test.date}T23:59` : '',
-      lockAfterDeadline: base.lockAfterDeadline ?? true,
-      submissionLocked: base.submissionLocked ?? false,
-      testId: test.id,
-      autoManaged: true,
-    };
-  }
-
-  if (!existingNode || existingNode.type !== 'lesson') {
-    return createLessonNode(classId, order, scheduledDate);
-  }
-
+function createTestNode(classId, test, existingNode) {
+  const isFinal = test.type === 'final';
   return {
-    ...existingNode,
+    id: existingNode?.id || makeId('node'),
     classId,
-    order,
-    date: existingNode.autoManaged === false && existingNode.date ? existingNode.date : scheduledDate || existingNode.date || '',
-    title: existingNode.title || `Lesson ${order}`,
-    description: existingNode.description || `Session ${order} learning quest.`,
-    testId: '',
-    autoManaged: existingNode.autoManaged ?? true,
+    order: 0,
+    title: existingNode?.title || test.title || (isFinal ? 'Final Boss' : 'Mini Boss'),
+    type: isFinal ? 'final' : 'miniboss',
+    date: test.date || '',
+    status: existingNode?.status || 'locked',
+    xpReward: Number(existingNode?.xpReward || (isFinal ? 400 : 160)),
+    goldReward: Number(existingNode?.goldReward || (isFinal ? 100 : 40)),
+    description: existingNode?.description || (isFinal ? 'Final course assessment.' : 'Progress assessment checkpoint.'),
+    assignmentInstructions: existingNode?.assignmentInstructions || test.description || '',
+    customPrompt: existingNode?.customPrompt || '',
+    acceptedEvidence: existingNode?.acceptedEvidence || 'Teacher-scored test evidence',
+    deadline: existingNode?.deadline || (test.date ? `${test.date}T23:59` : ''),
+    lockAfterDeadline: existingNode?.lockAfterDeadline ?? true,
+    submissionLocked: existingNode?.submissionLocked ?? false,
+    testId: test.id,
+    autoManaged: true,
   };
 }
 
@@ -458,66 +366,31 @@ function syncClassQuestMapState(current, classId, classPatch = {}) {
   };
   const total = nextClass.sessionCount;
   const dates = buildMeetingDates(nextClass.startDate, total, nextClass.meetingSlots, nextClass.sessionDates);
-  const existingNodes = current.questNodes
-    .filter((node) => node.classId === classId)
-    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
-  const submittedNodeIds = new Set(current.submissions.map((submission) => submission.nodeId));
-  const finalNode = [...existingNodes].reverse().find((node) => node.type === 'final') || null;
-  let workingNodes = finalNode ? existingNodes.filter((node) => node.id !== finalNode.id) : [...existingNodes];
-  const targetWorkingCount = Math.max(0, total - (finalNode ? 1 : 0));
-  const removedNodeIds = [];
-
-  while (workingNodes.length > targetWorkingCount) {
-    let removeIndex = -1;
-
-    for (let index = workingNodes.length - 1; index >= 0; index -= 1) {
-      const node = workingNodes[index];
-      if (node.type === 'lesson' && !submittedNodeIds.has(node.id) && node.status !== 'completed') {
-        removeIndex = index;
-        break;
-      }
-    }
-    if (removeIndex < 0) {
-      for (let index = workingNodes.length - 1; index >= 0; index -= 1) {
-        if (workingNodes[index].type === 'lesson' && !submittedNodeIds.has(workingNodes[index].id)) {
-          removeIndex = index;
-          break;
-        }
-      }
-    }
-    if (removeIndex < 0) {
-      for (let index = workingNodes.length - 1; index >= 0; index -= 1) {
-        if (workingNodes[index].type === 'lesson') {
-          removeIndex = index;
-          break;
-        }
-      }
-    }
-    if (removeIndex < 0) removeIndex = workingNodes.length - 1;
-
-    const [removed] = workingNodes.splice(removeIndex, 1);
-    if (removed) removedNodeIds.push(removed.id);
-  }
-
-  while (workingNodes.length < targetWorkingCount) {
-    const order = workingNodes.length + 1;
-    workingNodes.push(createLessonNode(classId, order, dates[order - 1]));
-  }
-
-  const orderedNodes = finalNode ? [...workingNodes, finalNode] : workingNodes;
-  const nextNodes = orderedNodes.map((node, index) => {
+  const existingNodes = current.questNodes.filter((node) => node.classId === classId);
+  const existingLessons = new Map(existingNodes.filter((node) => node.type === 'lesson').map((node) => [Number(node.order), node]));
+  const existingTests = new Map(existingNodes.filter((node) => node.testId).map((node) => [node.testId, node]));
+  const lessonNodes = Array.from({ length: total }, (_, index) => {
     const order = index + 1;
-    const isAutoLesson = node.type === 'lesson' && node.autoManaged !== false;
+    const existing = existingLessons.get(order);
+    const base = existing || createLessonNode(classId, order, dates[index]);
     return {
-      ...node,
+      ...base,
       classId,
       order,
-      date: isAutoLesson ? dates[index] || node.date || '' : node.date || dates[index] || '',
-      title: node.title || (node.type === 'lesson' ? `Lesson ${order}` : node.type === 'final' ? 'Final Boss' : 'Mini Boss'),
-      description: node.description || (node.type === 'lesson' ? `Session ${order} learning quest.` : ''),
-      autoManaged: node.autoManaged ?? node.type === 'lesson',
+      type: 'lesson',
+      date: base.autoManaged === false && base.date ? base.date : dates[index] || base.date || '',
+      title: base.title || `Lesson ${order}`,
+      description: base.description || `Session ${order} learning quest.`,
+      testId: '',
+      autoManaged: base.autoManaged ?? true,
     };
   });
+  const testNodes = current.tests
+    .filter((test) => test.classId === classId)
+    .map((test) => createTestNode(classId, test, existingTests.get(test.id)));
+  const nextNodes = orderQuestNodes([...lessonNodes, ...testNodes]);
+  const keptNodeIds = new Set(nextNodes.map((node) => node.id));
+  const removedNodeIds = existingNodes.filter((node) => !keptNodeIds.has(node.id)).map((node) => node.id);
 
   return {
     ...current,
@@ -531,59 +404,7 @@ function syncClassQuestMapState(current, classId, classPatch = {}) {
 }
 
 function rebuildClassQuestMapState(current, classId, classPatch = {}) {
-  const currentClass = current.classes.find((item) => item.id === classId);
-  if (!currentClass) return current;
-
-  const nextClass = {
-    ...currentClass,
-    ...classPatch,
-    meetingSlots: classPatch.meetingSlots ?? currentClass.meetingSlots ?? [],
-    sessionCount: Math.max(1, Number(classPatch.sessionCount ?? currentClass.sessionCount) || 1),
-  };
-  const total = nextClass.sessionCount;
-  const dates = buildMeetingDates(nextClass.startDate, total, nextClass.meetingSlots, nextClass.sessionDates);
-  const classTests = current.tests.filter((test) => test.classId === classId);
-  const assignments = buildTestAssignments(dates, classTests);
-  const existingNodes = current.questNodes
-    .filter((node) => node.classId === classId)
-    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
-  const existingByTestId = new Map(existingNodes.filter((node) => node.testId).map((node) => [node.testId, node]));
-  const existingLessons = existingNodes.filter((node) => node.type === 'lesson');
-  const usedIds = new Set();
-  const nextNodes = [];
-
-  for (let index = 0; index < total; index += 1) {
-    const order = index + 1;
-    const test = assignments.get(index);
-    let existingNode = null;
-
-    if (test) {
-      const matchingTestNode = existingByTestId.get(test.id);
-      if (matchingTestNode && !usedIds.has(matchingTestNode.id)) existingNode = matchingTestNode;
-      if (!existingNode) {
-        const samePosition = existingNodes[index];
-        if (samePosition && !usedIds.has(samePosition.id)) existingNode = samePosition;
-      }
-    } else {
-      const samePosition = existingNodes[index];
-      if (samePosition?.type === 'lesson' && !usedIds.has(samePosition.id)) existingNode = samePosition;
-      if (!existingNode) existingNode = existingLessons.find((node) => !usedIds.has(node.id)) || null;
-    }
-
-    if (existingNode) usedIds.add(existingNode.id);
-    nextNodes.push(mergeQuestNodeForSlot({ existingNode, classId, order, scheduledDate: dates[index], test }));
-  }
-
-  const removedNodeIds = existingNodes.filter((node) => !usedIds.has(node.id)).map((node) => node.id);
-  return {
-    ...current,
-    classes: current.classes.map((item) => (item.id === classId ? nextClass : item)),
-    questNodes: [
-      ...current.questNodes.filter((node) => node.classId !== classId),
-      ...nextNodes,
-    ],
-    submissions: current.submissions.filter((submission) => !removedNodeIds.includes(submission.nodeId)),
-  };
+  return syncClassQuestMapState(current, classId, classPatch);
 }
 
 function syncAllClassQuestMaps(data) {
@@ -637,7 +458,12 @@ export function AppProvider({ children }) {
     setCloudStatus('loading');
     const remotePayload = await loadOrCreateTeacherWorkspace(user, sanitizeWorkspaceData(dataRef.current));
     const fallback = cloneDefault();
-    const normalized = syncAllClassQuestMaps(normalizeData(remotePayload, fallback));
+    let normalized = syncAllClassQuestMaps(normalizeData(remotePayload, fallback));
+    try {
+      normalized = await migrateWorkspaceSubmissionImages(user.uid, normalized);
+    } catch (error) {
+      console.warn('Could not migrate legacy submission images to Firebase Storage:', error);
+    }
     const teacherRecord = {
       id: user.uid,
       name: profile.name || user.displayName || user.email,
@@ -934,18 +760,14 @@ export function AppProvider({ children }) {
 
     setData((current) => {
       const usedUsernames = new Set(current.students.map((student) => String(student.username || '').toLowerCase()).filter(Boolean));
-      const usedEmails = new Set(current.students.map((student) => String(student.email || '').toLowerCase()).filter(Boolean));
       const createdStudents = students.map((student) => {
         const role = roleCatalog[student.role] || roleCatalog.Explorer;
         const username = uniqueUsername(student.username, student.name, usedUsernames);
-        let email = String(student.email || '').toLowerCase();
-        if (!email || usedEmails.has(email)) email = `${username}@classquest.local`;
-        usedEmails.add(email);
         return {
           id: makeId('student'),
           classIds: [created.id],
           name: student.name,
-          email,
+          email: String(student.email || '').toLowerCase(),
           username,
           role: student.role || 'Explorer',
           gender: student.gender || 'male',
@@ -990,7 +812,14 @@ export function AppProvider({ children }) {
     setData((current) => syncClassQuestMapState(current, classId, patch));
   };
 
-  const deleteClass = (classId) => {
+  const deleteClass = async (classId) => {
+    const orphanedStudents = data.students.filter((student) => student.classIds.includes(classId) && student.classIds.length === 1);
+    try {
+      await Promise.all(orphanedStudents.filter((student) => student.authUid).map((student) => deactivateStudentAccount(student.authUid, session.userId)));
+    } catch (error) {
+      return { ok: false, message: friendlyFirebaseError(error) };
+    }
+    const orphanedIds = new Set(orphanedStudents.map((student) => student.id));
     setData((current) => {
       const nodeIds = current.questNodes.filter((item) => item.classId === classId).map((item) => item.id);
       return {
@@ -1000,14 +829,16 @@ export function AppProvider({ children }) {
         rules: current.rules.filter((item) => item.classId !== classId),
         tests: current.tests.filter((item) => item.classId !== classId),
         questNodes: current.questNodes.filter((item) => item.classId !== classId),
-        pointLogs: current.pointLogs.filter((item) => item.classId !== classId),
-        submissions: current.submissions.filter((item) => !nodeIds.includes(item.nodeId)),
-        students: current.students.map((student) => ({
-          ...student,
-          classIds: student.classIds.filter((id) => id !== classId),
-        })),
+        pointLogs: current.pointLogs.filter((item) => item.classId !== classId && !orphanedIds.has(item.studentId)),
+        purchases: current.purchases.filter((item) => !orphanedIds.has(item.studentId)),
+        skillUses: current.skillUses.filter((item) => !orphanedIds.has(item.studentId)),
+        submissions: current.submissions.filter((item) => !nodeIds.includes(item.nodeId) && !orphanedIds.has(item.studentId)),
+        students: current.students
+          .filter((student) => !orphanedIds.has(student.id))
+          .map((student) => ({ ...student, classIds: student.classIds.filter((id) => id !== classId) })),
       };
     });
+    return { ok: true };
   };
 
   const addStudent = async (payload) => {
@@ -1055,7 +886,12 @@ export function AppProvider({ children }) {
   };
 
   const updateStudent = (studentId, patch) => {
+    const target = data.students.find((student) => student.id === studentId);
     const safePatch = withoutCredentials(patch);
+    if (target?.authUid) {
+      delete safePatch.email;
+      delete safePatch.username;
+    }
     updateCollection('students', (items) => items.map((item) => {
       if (item.id !== studentId) return item;
       const next = { ...withoutCredentials(item), ...safePatch };
@@ -1121,14 +957,34 @@ export function AppProvider({ children }) {
   };
 
   const addRule = (payload) => updateCollection('rules', (items) => [...items, { id: makeId('rule'), ...payload }]);
+  const updateRule = (ruleId, patch) => updateCollection('rules', (items) => items.map((item) => item.id === ruleId ? { ...item, ...patch } : item));
   const deleteRule = (ruleId) => updateCollection('rules', (items) => items.filter((item) => item.id !== ruleId));
 
   const addTest = (payload) => {
-    const created = { id: makeId('test'), ...payload };
-    updateCollection('tests', (items) => [...items, created]);
-    return created;
+    const klass = data.classes.find((item) => item.id === payload.classId);
+    if (!klass) return { ok: false, message: 'Không tìm thấy lớp.' };
+    const created = { id: makeId('test'), ...payload, type: payload.type === 'final' ? 'final' : 'progress' };
+    const lessonDates = buildMeetingDates(klass.startDate, klass.sessionCount, klass.meetingSlots, klass.sessionDates);
+    const errors = validateTestSchedule({
+      tests: [...data.tests.filter((test) => test.classId === payload.classId), created],
+      lessonDates,
+      startDate: klass.startDate,
+    });
+    if (errors.length) return { ok: false, message: errors[0] };
+    setData((current) => {
+      const next = { ...current, tests: sortTests([...current.tests, created]) };
+      return rebuildClassQuestMapState(next, payload.classId);
+    });
+    return { ok: true, test: created };
   };
-  const deleteTest = (testId) => updateCollection('tests', (items) => items.filter((item) => item.id !== testId));
+  const deleteTest = (testId) => {
+    setData((current) => {
+      const test = current.tests.find((item) => item.id === testId);
+      if (!test) return current;
+      const next = { ...current, tests: current.tests.filter((item) => item.id !== testId) };
+      return rebuildClassQuestMapState(next, test.classId);
+    });
+  };
 
   const addQuestNode = (payload) => {
     const created = {
@@ -1276,7 +1132,7 @@ export function AppProvider({ children }) {
     }
     const useCount = countSkillUses(data.skillUses, studentId, skill);
     if (useCount >= skillUsageLimit(skill)) {
-      const period = skill.usesPerWeek ? 'tuần này' : skill.usesPerMonth ? 'tháng này' : 'khóa học này';
+      const period = skill.usesPerDay ? 'hôm nay' : skill.usesPerWeek ? 'tuần này' : skill.usesPerMonth ? 'tháng này' : 'khóa học này';
       return { ok: false, message: `Kỹ năng này đã dùng đủ lượt trong ${period}.` };
     }
     if (Number(student.mana || 0) < Number(skill.manaCost || 0)) {
@@ -1296,7 +1152,7 @@ export function AppProvider({ children }) {
     return { ok: true, message: `Đã kích hoạt ${skill.name}. Hãy cho giáo viên xem để xác nhận hiệu ứng.` };
   };
 
-  const submitQuest = (studentId, nodeId, evidence = {}) => {
+  const submitQuest = async (studentId, nodeId, evidence = {}) => {
     const node = data.questNodes.find((item) => item.id === nodeId);
     if (!node) return { ok: false, message: 'Không tìm thấy nhiệm vụ.' };
     if (node.status === 'locked') return { ok: false, message: 'Nhiệm vụ này chưa được mở.' };
@@ -1308,6 +1164,17 @@ export function AppProvider({ children }) {
     const hasEvidence = evidence.workLink?.trim() || evidence.responseText?.trim() || evidence.images?.length;
     if (!hasEvidence) return { ok: false, message: 'Hãy thêm đường dẫn, câu trả lời hoặc hình ảnh minh chứng.' };
 
+    const existing = data.submissions.find((item) => item.studentId === studentId && item.nodeId === nodeId);
+    const submissionId = existing?.id || makeId('submission');
+    let uploadedImages;
+    try {
+      uploadedImages = await uploadSubmissionImages(session?.authUid || studentId, submissionId, evidence.images || []);
+    } catch (error) {
+      console.warn('Could not upload quest evidence images:', error);
+      return { ok: false, message: 'Chưa thể tải hình lên Firebase Storage. Hãy thử lại hoặc nộp bằng đường dẫn.' };
+    }
+    const storedEvidence = { ...evidence, images: uploadedImages };
+
     setData((current) => {
       const existing = current.submissions.find((item) => item.studentId === studentId && item.nodeId === nodeId);
       const submittedAt = new Date().toISOString();
@@ -1318,7 +1185,7 @@ export function AppProvider({ children }) {
             item.id === existing.id
               ? {
                   ...item,
-                  ...evidence,
+                  ...storedEvidence,
                   status: 'submitted',
                   submittedAt,
                   teacherFeedback: '',
@@ -1333,15 +1200,15 @@ export function AppProvider({ children }) {
         submissions: [
           ...current.submissions,
           {
-            id: makeId('submission'),
+            id: submissionId,
             studentId,
             nodeId,
             status: 'submitted',
             submittedAt,
-            workLink: evidence.workLink || '',
-            responseText: evidence.responseText || '',
-            studentNote: evidence.studentNote || '',
-            images: evidence.images || [],
+            workLink: storedEvidence.workLink || '',
+            responseText: storedEvidence.responseText || '',
+            studentNote: storedEvidence.studentNote || '',
+            images: storedEvidence.images || [],
             teacherFeedback: '',
             attemptCount: 1,
           },
@@ -1387,6 +1254,7 @@ export function AppProvider({ children }) {
       updateGroup,
       deleteGroup,
       addRule,
+      updateRule,
       deleteRule,
       addTest,
       deleteTest,

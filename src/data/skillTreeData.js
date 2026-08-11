@@ -17,13 +17,18 @@ export const skillEffectTypes = {
   ultimate: "ultimate",
 };
 
-export const maxLevel = 30;
+export const maxLevel = 40;
 
 export const tierRequiredLevels = {
   1: 1,
-  2: 8,
-  3: 15,
-  4: 25,
+  2: 5,
+  3: 10,
+  4: 15,
+  5: 20,
+  6: 25,
+  7: 30,
+  8: 35,
+  9: 40,
 };
 
 export const classBaseStats = {
@@ -444,7 +449,7 @@ return {
   };
 }
 
-export const skillTrees = {
+const legacySkillTrees = {
   1: [
     makeSkill({
       id: "warrior_retry_1",
@@ -1637,6 +1642,31 @@ export const skillTrees = {
     }),
   ],
 };
+
+const skillUnlockLevels = Object.values(tierRequiredLevels);
+
+function makeNineSkillProgression(skills) {
+  const selected = skills.filter((skill) => !skill.isUltimate).slice(0, 9);
+  const selectedIds = new Set(selected.map((skill) => skill.id));
+  return [...selected]
+    .sort((a, b) => Number(a.tier) - Number(b.tier) || Number(a.position?.x || 0) - Number(b.position?.x || 0))
+    .map((skill, index) => ({
+      ...skill,
+      tier: index + 1,
+      requiredLevel: skillUnlockLevels[index],
+      cost: 1,
+      prerequisiteSkillIds: (skill.prerequisiteSkillIds || []).filter((id) => selectedIds.has(id)),
+      usesPerDay: 1,
+      usesPerWeek: undefined,
+      usesPerMonth: undefined,
+      usesPerTerm: undefined,
+      isUltimate: false,
+    }));
+}
+
+export const skillTrees = Object.fromEntries(
+  Object.entries(legacySkillTrees).map(([classId, skills]) => [classId, makeNineSkillProgression(skills)]),
+);
 
 export function getSkillTreeByClassId(classId) {
   return skillTrees[Number(classId)] || [];
