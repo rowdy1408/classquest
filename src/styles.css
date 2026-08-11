@@ -990,6 +990,10 @@ code { background: #edf3ff; color: #385a9e; padding: 4px 7px; border-radius: 7px
   background: rgba(255,255,255,.035);
   border-color: rgba(255,255,255,.075);
 }
+.app-shell .empty-state:not(.compact) {
+  color: #243047;
+  font-weight: 650;
+}
 .app-shell .command-card {
   min-height: 126px;
   border-radius: 14px;
