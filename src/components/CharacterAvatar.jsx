@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getArmorTier, getCharacterSkinCandidates } from '../utils/characterSkins';
+import { getArmorTier, getCharacterSkinCandidates, normalizeSkinRole } from '../utils/characterSkins';
 
 const ROLE_FALLBACKS = {
-  Warrior: '⚔️',
-  Mage: '🧙',
-  Cleric: '✨',
-  Explorer: '🧭',
-  Guardian: '🛡️',
-  Bard: '🎵',
+  warrior: '⚔️',
+  mage: '🧙',
+  cleric: '✨',
+  explorer: '🧭',
+  guardian: '🛡️',
+  bard: '🎵',
 };
 
 export default function CharacterAvatar({
@@ -20,13 +20,20 @@ export default function CharacterAvatar({
   showTier = false,
   alt,
 }) {
-  const resolvedRole = student?.role || role || 'Explorer';
+  const resolvedRole = student?.role || role || student?.rpgClassId || 'Explorer';
+  const resolvedClassId = student?.rpgClassId;
+  const resolvedRoleKey = normalizeSkinRole(resolvedRole, resolvedClassId);
   const resolvedGender = student?.gender || gender || 'male';
   const resolvedLevel = Number(student?.level ?? level ?? 1);
-  const resolvedFallback = student?.avatar || ROLE_FALLBACKS[resolvedRole] || fallback;
+  const resolvedFallback = student?.avatar || ROLE_FALLBACKS[resolvedRoleKey] || fallback;
   const candidates = useMemo(
-    () => getCharacterSkinCandidates({ role: resolvedRole, gender: resolvedGender, level: resolvedLevel }),
-    [resolvedRole, resolvedGender, resolvedLevel],
+    () => getCharacterSkinCandidates({
+      role: resolvedRole,
+      rpgClassId: resolvedClassId,
+      gender: resolvedGender,
+      level: resolvedLevel,
+    }),
+    [resolvedRole, resolvedClassId, resolvedGender, resolvedLevel],
   );
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -43,12 +50,12 @@ export default function CharacterAvatar({
   };
 
   return (
-    <span className={`character-skin ${showTier ? 'has-armour-tier' : ''} ${className}`.trim()} title={`${resolvedRole} · ${tier.label}`}>
+    <span className={`character-skin ${showTier ? 'has-armour-tier' : ''} ${className}`.trim()} title={`${resolvedRoleKey} · ${tier.label}`}>
       <span className="character-skin-frame">
         {!failed ? (
           <img
             src={candidates[candidateIndex]}
-            alt={alt || `${resolvedRole} ${tier.label}`}
+            alt={alt || `${resolvedRoleKey} ${tier.label}`}
             onError={handleError}
             draggable="false"
             decoding="async"
@@ -56,7 +63,7 @@ export default function CharacterAvatar({
             data-character-source="assets/skins"
           />
         ) : (
-          <span className="character-skin-fallback" aria-label={`${resolvedRole} fallback avatar`}>{resolvedFallback}</span>
+          <span className="character-skin-fallback" aria-label={`${resolvedRoleKey} fallback avatar`}>{resolvedFallback}</span>
         )}
       </span>
       {showTier && <small className={`armour-tier-badge tier-${tier.key}`}>{tier.label}</small>}

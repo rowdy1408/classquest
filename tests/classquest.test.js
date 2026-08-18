@@ -5,7 +5,7 @@ import { normalizeUsername, studentAuthEmail } from '../src/utils/identity.js';
 import { validateTestSchedule } from '../src/utils/classValidation.js';
 import { buildMeetingDates, orderQuestNodes } from '../src/utils/questSchedule.js';
 import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
-import { armorTiers, getArmorTier, MAX_CHARACTER_LEVEL } from '../src/utils/characterSkins.js';
+import { armorTiers, getArmorTier, getCharacterSkinCandidates, MAX_CHARACTER_LEVEL, normalizeSkinRole } from '../src/utils/characterSkins.js';
 import { parseClassWorkbook } from '../src/utils/classImport.js';
 
 test('student authentication always derives from username', () => {
@@ -59,6 +59,30 @@ test('armour upgrades every ten levels and caps at 40', () => {
   assert.equal(getArmorTier(20).key, 'gold');
   assert.equal(getArmorTier(30).key, 'crystal');
   assert.equal(getArmorTier(40).key, 'divine');
+});
+
+test('student avatars resolve all custom class, gender, and armour paths', () => {
+  assert.equal(normalizeSkinRole('Chiến Binh'), 'warrior');
+  assert.equal(normalizeSkinRole('Pháp Sư'), 'mage');
+  assert.equal(normalizeSkinRole('', 3), 'cleric');
+  assert.equal(normalizeSkinRole('', 6), 'bard');
+
+  const roles = ['warrior', 'mage', 'cleric', 'explorer', 'guardian', 'bard'];
+  const genders = ['male', 'female'];
+  const levels = [1, 10, 20, 30, 40];
+
+  for (const role of roles) {
+    for (const gender of genders) {
+      for (const level of levels) {
+        const tier = getArmorTier(level).key;
+        const expectedStem = tier === 'base'
+          ? (gender === 'female' ? `${role}-female` : role)
+          : `${role}-${tier}${gender === 'female' ? '-female' : ''}`;
+        const [firstCandidate] = getCharacterSkinCandidates({ role, gender, level });
+        assert.ok(firstCandidate.endsWith(`/assets/skins/${role}/${expectedStem}.webp`));
+      }
+    }
+  }
 });
 
 test('the downloadable Excel template passes the production parser', async () => {
