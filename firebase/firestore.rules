@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isActiveTeacher(uid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/mhpUsers/$(uid))
+        && get(/databases/$(database)/documents/mhpUsers/$(uid)).data.role == 'teacher'
+        && get(/databases/$(database)/documents/mhpUsers/$(uid)).data.active == true;
+    }
+
+    function isVerifiedGoogleTeacherProfile() {
+      return request.resource.data.role == 'teacher'
+        && request.resource.data.active == true
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function preservesStudentIdentity() {
+      return request.resource.data.role == 'student'
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.studentId == resource.data.studentId;
+    }
+
+    match /mhpUsers/{uid} {
+      allow read: if isSelf(uid)
+        || (signedIn()
+          && resource.data.role == 'student'
+          && resource.data.ownerId == request.auth.uid
+          && isActiveTeacher(request.auth.uid));
+
+      allow create: if isSelf(uid)
+        && (isVerifiedGoogleTeacherProfile()
+          || request.resource.data.role == 'student');
+
+      allow update: if (isSelf(uid)
+          && request.resource.data.role == resource.data.role
+          && (resource.data.role != 'student'
+            || (resource.data.active == true
+              && request.resource.data.active == true
+              && preservesStudentIdentity())))
+        || (signedIn()
+          && resource.data.role == 'student'
+          && resource.data.ownerId == request.auth.uid
+          && preservesStudentIdentity()
+          && isActiveTeacher(request.auth.uid));
+
+      allow delete: if false;
+    }
+
+    match /mhpClasses/{ownerId} {
+      allow read, create, update, delete: if isSelf(ownerId) && isActiveTeacher(ownerId);
+    }
+
+    match /mhpStudentViews/{studentUid} {
+      allow read: if isSelf(studentUid)
+        || (signedIn()
+          && resource.data.ownerId == request.auth.uid
+          && isActiveTeacher(request.auth.uid));
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && isActiveTeacher(request.auth.uid);
+
+      allow update: if (signedIn()
+          && resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == request.auth.uid
+          && isActiveTeacher(request.auth.uid))
+        || (isSelf(studentUid)
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['studentState', 'activity', 'studentUpdatedAt']));
+
+      allow delete: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && isActiveTeacher(request.auth.uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

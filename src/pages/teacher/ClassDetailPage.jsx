@@ -300,7 +300,7 @@ function ClassModal({ modal, setModal, classId, students, roleCatalog, app, edit
   const close = () => setModal(null);
   if (!modal) return null;
 
-  if (modal === 'student') return <StudentFormModal open onClose={close} editingStudent={editingStudent} students={app.data.students} roleCatalog={roleCatalog} onSubmit={async (form) => { const level = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(form.level) || 1)); const payload = { name: form.name, email: form.email, username: form.username, password: form.password, role: form.role, gender: form.gender, level, xpToNext: Math.max(100, level * 100), note: form.note || '' }; if (editingStudent) { app.updateStudent(editingStudent.id, payload); close(); return { ok: true }; } const result = await app.addStudent({ ...payload, classIds: [classId] }); if (result.ok) close(); return result; }} />;
+  if (modal === 'student') return <StudentFormModal open onClose={close} editingStudent={editingStudent} students={app.data.students} roleCatalog={roleCatalog} onSubmit={async (form) => { const level = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(form.level) || 1)); const payload = { name: form.name, email: form.email, username: form.username, password: form.password, role: form.role, gender: form.gender, level, xpToNext: Math.max(100, level * 100), note: form.note || '' }; if (editingStudent) { const result = await app.updateStudent(editingStudent.id, payload); if (result.ok) close(); return result; } const result = await app.addStudent({ ...payload, classIds: [classId] }); if (result.ok) close(); return result; }} />;
   if (modal === 'group') return <SimpleFormModal title="Tạo biệt đội" open onClose={close} initial={{ name: '', motto: '' }} fields={[['name','Tên biệt đội','text'],['motto','Khẩu hiệu','text']]} onSubmit={(form) => { app.addGroup({ ...form, classId }); close(); }} />;
   if (modal === 'rule') return <SimpleFormModal title="Thêm quy tắc lớp" open onClose={close} initial={{ type: 'reward', title: '', points: 5, gold: 5, description: '' }} fields={[['type','Loại','select',[{ value: 'reward', label: 'Khen thưởng' }, { value: 'penalty', label: 'Trừ điểm' }]],['title','Tên quy tắc','text'],['points','Thay đổi XP','number'],['gold','Thay đổi Gold','number'],['description','Mô tả','textarea']]} onSubmit={(form) => { app.addRule({ ...form, classId, points: Number(form.points), gold: Number(form.gold) }); close(); }} />;
   if (modal === 'test') return <SimpleFormModal title="Thêm ngày kiểm tra" open onClose={close} initial={{ title: '', date: '', type: 'progress', maxScore: 100, description: '' }} fields={[['title','Tên bài kiểm tra','text'],['date','Ngày kiểm tra','date'],['type','Loại Boss','select',[{ value: 'progress', label: 'Kiểm tra tiến độ' }, { value: 'final', label: 'Kiểm tra cuối khóa' }]],['maxScore','Điểm tối đa','number'],['description','Nội dung / hình thức','textarea']]} onSubmit={(form) => { const result = app.addTest({ ...form, classId, maxScore: Number(form.maxScore) }); if (result.ok) close(); return result; }} />;
@@ -391,7 +391,7 @@ function StudentFormModal({ open, onClose, editingStudent, students, roleCatalog
             <label><span>Tên đăng nhập</span><input value={form.username || ''} onChange={(event) => setForm({ ...form, username: event.target.value })} readOnly={!editingStudent || Boolean(editingStudent?.authUid)} required /></label>
             {!editingStudent?.authUid && <label className="span-2"><span>Mật khẩu tạm</span><input value={form.password || ''} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength="8" required /></label>}
           </div>
-          {!editingStudent && <p>Tài khoản sẽ được tạo trên Firebase để học viên đăng nhập từ mọi thiết bị. Hãy gửi tên đăng nhập và mật khẩu cho học viên.</p>}
+          {!editingStudent?.authUid && <p>Mật khẩu này sẽ tạo tài khoản Firebase để học viên đăng nhập từ mọi thiết bị. Nếu tên đăng nhập đã tồn tại, ClassQuest sẽ tự tạo một tên riêng cho lớp.</p>}
           {editingStudent?.authUid && <p>Tài khoản online đã được kích hoạt. Email và tên đăng nhập được khóa để giữ đúng liên kết Firebase.</p>}
         </div>
 
@@ -400,7 +400,7 @@ function StudentFormModal({ open, onClose, editingStudent, students, roleCatalog
         <label><span>Cấp nhân vật</span><input type="number" min="1" max={MAX_CHARACTER_LEVEL} value={form.level || 1} onChange={(event) => setForm({ ...form, level: event.target.value })} /></label>
         <label className="span-2"><span>Ghi chú của giáo viên</span><textarea value={form.note || ''} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
         {error && <div className="error-message span-2" role="alert">{error}</div>}
-        <div className="form-actions span-2"><button className="button primary" type="submit" disabled={busy}><Save size={16} /> {busy ? 'Đang tạo tài khoản…' : editingStudent ? 'Lưu học viên' : 'Tạo tài khoản học viên'}</button></div>
+        <div className="form-actions span-2"><button className="button primary" type="submit" disabled={busy}><Save size={16} /> {busy ? 'Đang tạo tài khoản…' : editingStudent?.authUid ? 'Lưu học viên' : 'Tạo tài khoản học viên'}</button></div>
       </form>
     </Modal>
   );

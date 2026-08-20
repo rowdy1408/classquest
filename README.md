@@ -28,10 +28,9 @@ npm run dev
 
 1. Bật Google và Email/Password trong Firebase Authentication.
 2. Thêm domain GitHub Pages vào Authentication → Settings → Authorized domains.
-3. Áp dụng ClassQuest Rules từ gói phát hành riêng vào Firestore Rules hiện tại rồi Publish.
+3. Publish `firebase/firestore.rules`. Rules này cho phép mọi tài khoản Google đã xác minh tự tạo workspace giáo viên riêng, không cần danh sách lời mời.
 4. Áp dụng `firebase/storage.rules` trước khi bật nộp bài bằng hình ảnh. Ảnh mới được lưu trong Firebase Storage; Firestore chỉ giữ URL và metadata nhỏ.
-5. Tạo lời mời giáo viên trong `mhpTeacherInvites` theo hướng dẫn tại `firebase/FIREBASE_SETUP.md`.
-6. Với học viên cũ, mở tab Học viên và chọn **Kích hoạt** một lần. Học viên mới được tạo tài khoản online tự động.
+5. Với học viên cũ chưa có tài khoản online, mở phần **Sửa học viên**, đặt mật khẩu tạm từ 8 ký tự rồi lưu. Học viên mới được tạo tài khoản online tự động.
 
 ## Deploy GitHub Pages
 
@@ -50,13 +49,13 @@ Trong repository GitHub:
 
 Firebase Web API key sẽ xuất hiện trong bundle chạy trên trình duyệt theo thiết kế của Firebase; an toàn dữ liệu phụ thuộc vào Authentication, Firestore Rules và Storage Rules. Không đưa service-account key hoặc Admin SDK secret vào repository hay GitHub Pages.
 
-Các file Rules chi tiết không được commit vào repository public. Chúng nằm trong gói phát hành riêng để chủ Firebase project tự rà và Publish.
+Có thể publish riêng Firestore Rules bằng Firebase CLI: `firebase deploy --only firestore:rules`.
 
 ## Dữ liệu và quyền truy cập
 
 Workspace đầy đủ chỉ dành cho giáo viên sở hữu. Mỗi học viên nhận một bản dữ liệu đã lọc theo tài khoản của mình; mật khẩu và ghi chú nội bộ không được đưa vào bản dữ liệu này.
 
-Giáo viên đăng nhập bằng Google. Học viên đăng nhập bằng username được tạo tự động và mật khẩu tạm riêng. Hãy gửi thông tin này qua kênh riêng cho từng học viên.
+Giáo viên đăng nhập bằng Google và tự động có workspace riêng. Học viên đăng nhập bằng username được tạo tự động và mật khẩu tạm riêng. Hãy gửi thông tin này qua kênh riêng cho từng học viên.
 
 ## Nhân vật và Skill Tree
 

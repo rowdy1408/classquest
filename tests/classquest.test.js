@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeUsername, studentAuthEmail } from '../src/utils/identity.js';
+import { normalizeUsername, scopedStudentUsername, studentAuthEmail } from '../src/utils/identity.js';
 import { validateTestSchedule } from '../src/utils/classValidation.js';
 import { buildMeetingDates, orderQuestNodes } from '../src/utils/questSchedule.js';
 import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
@@ -12,6 +12,22 @@ test('student authentication always derives from username', () => {
   assert.equal(normalizeUsername('Bảo Nguyễn 01'), 'bao-nguyen-01');
   assert.equal(studentAuthEmail('Bao-01'), 'bao-01@classquest.local');
   assert.throws(() => studentAuthEmail('   '));
+});
+
+test('student usernames can be scoped safely to separate teacher workspaces', () => {
+  const firstTeacher = scopedStudentUsername('student1', 'teacher-ABC12345');
+  const secondTeacher = scopedStudentUsername('student1', 'teacher-XYZ98765');
+  assert.notEqual(firstTeacher, secondTeacher);
+  assert.match(firstTeacher, /^student1-[a-z0-9]+$/);
+  assert.ok(firstTeacher.length <= 40);
+  assert.notEqual(scopedStudentUsername('student1', 'teacher-ABC12345', 2), firstTeacher);
+});
+
+test('Firestore rules allow verified Google teachers without an invite collection', async () => {
+  const rules = await readFile(new URL('../firebase/firestore.rules', import.meta.url), 'utf8');
+  assert.doesNotMatch(rules, /mhpTeacherInvites/);
+  assert.match(rules, /sign_in_provider == 'google.com'/);
+  assert.match(rules, /match \/mhpClasses\/\{ownerId\}/);
 });
 
 test('meeting dates preserve an exact imported lesson schedule', () => {

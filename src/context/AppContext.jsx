@@ -8,8 +8,8 @@ import { buildMeetingDates, orderQuestNodes } from '../utils/questSchedule';
 import { sortTests, validateTestSchedule } from '../utils/classValidation';
 import {
   deactivateStudentAccount,
+  ensureTeacherProfile,
   friendlyFirebaseError,
-  getTeacherProfile,
   getUserProfile,
   loadStudentView,
   loadOrCreateTeacherWorkspace,
@@ -452,8 +452,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const activateTeacherUser = useCallback(async (user) => {
-    const profile = await getTeacherProfile(user);
-    if (!profile) return { ok: false, message: 'Tài khoản Google này chưa được đăng ký làm giáo viên ClassQuest.' };
+    const profile = await ensureTeacherProfile(user);
 
     setCloudStatus('loading');
     const remotePayload = await loadOrCreateTeacherWorkspace(user, sanitizeWorkspaceData(dataRef.current));
@@ -862,8 +861,8 @@ export function AppProvider({ children }) {
       xpToNext: Math.max(100, startingLevel * 100),
     };
     try {
-      const authUid = await provisionStudentAccount(session.userId, created, password);
-      const cloudStudent = { ...created, authUid };
+      const account = await provisionStudentAccount(session.userId, created, password);
+      const cloudStudent = { ...created, username: account.username, authUid: account.authUid };
       updateCollection('students', (items) => [...items, cloudStudent]);
       return { ok: true, student: cloudStudent };
     } catch (error) {
@@ -877,20 +876,35 @@ export function AppProvider({ children }) {
     if (student.authUid) return { ok: true, student };
     if (!temporaryPassword || temporaryPassword.length < 8) return { ok: false, message: 'Mật khẩu tạm cần có ít nhất 8 ký tự.' };
     try {
-      const authUid = await provisionStudentAccount(session.userId, student, temporaryPassword);
-      updateCollection('students', (items) => items.map((item) => item.id === studentId ? { ...withoutCredentials(item), authUid } : item));
-      return { ok: true, student: { ...withoutCredentials(student), authUid } };
+      const account = await provisionStudentAccount(session.userId, student, temporaryPassword);
+      updateCollection('students', (items) => items.map((item) => item.id === studentId
+        ? { ...withoutCredentials(item), username: account.username, authUid: account.authUid }
+        : item));
+      return { ok: true, student: { ...withoutCredentials(student), username: account.username, authUid: account.authUid } };
     } catch (error) {
       return { ok: false, message: friendlyFirebaseError(error) };
     }
   };
 
-  const updateStudent = (studentId, patch) => {
+  const updateStudent = async (studentId, patch) => {
     const target = data.students.find((student) => student.id === studentId);
-    const safePatch = withoutCredentials(patch);
+    if (!target) return { ok: false, message: 'Không tìm thấy học viên.' };
+    const { password, ...profilePatch } = patch || {};
+    const safePatch = withoutCredentials(profilePatch);
     if (target?.authUid) {
       delete safePatch.email;
       delete safePatch.username;
+    }
+    let account = null;
+    if (!target.authUid) {
+      if (!password || password.length < 8) return { ok: false, message: 'Mật khẩu tạm cần có ít nhất 8 ký tự.' };
+      try {
+        account = await provisionStudentAccount(session.userId, { ...withoutCredentials(target), ...safePatch }, password);
+        safePatch.username = account.username;
+        safePatch.authUid = account.authUid;
+      } catch (error) {
+        return { ok: false, message: friendlyFirebaseError(error) };
+      }
     }
     updateCollection('students', (items) => items.map((item) => {
       if (item.id !== studentId) return item;
@@ -904,6 +918,7 @@ export function AppProvider({ children }) {
       }
       return next;
     }));
+    return { ok: true, student: { ...withoutCredentials(target), ...safePatch }, accountCreated: Boolean(account) };
   };
 
   const deleteStudent = async (studentId) => {
