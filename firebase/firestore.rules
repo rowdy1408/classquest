@@ -10,98 +10,190 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function userPath(uid) {
+      return /databases/$(database)/documents/mhpUsers/$(uid);
+    }
+
     function isActiveTeacher(uid) {
       return signedIn()
-        && exists(/databases/$(database)/documents/mhpUsers/$(uid))
-        && get(/databases/$(database)/documents/mhpUsers/$(uid)).data.role == 'teacher'
-        && get(/databases/$(database)/documents/mhpUsers/$(uid)).data.active == true;
+        && request.auth.uid == uid
+        && exists(userPath(uid))
+        && get(userPath(uid)).data.role == 'teacher'
+        && get(userPath(uid)).data.active == true;
+    }
+
+    function isActiveStudent(uid) {
+      return isSelf(uid)
+        && exists(userPath(uid))
+        && get(userPath(uid)).data.role == 'student'
+        && get(userPath(uid)).data.active == true;
+    }
+
+    function studentPasswordChanged(uid) {
+      return isActiveStudent(uid)
+        && get(userPath(uid)).data.mustChangePassword == false;
     }
 
     function isVerifiedGoogleTeacherProfile() {
       return request.resource.data.role == 'teacher'
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.provider == 'google.com'
         && request.resource.data.active == true
         && request.auth.token.email_verified == true
-        && request.auth.token.firebase.sign_in_provider == 'google.com';
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.resource.data.keys().hasOnly([
+          'role', 'name', 'email', 'photoURL', 'provider', 'active',
+          'createdAt', 'updatedAt'
+        ]);
     }
 
-    function preservesStudentIdentity() {
-      return request.resource.data.role == 'student'
-        && request.resource.data.ownerId == resource.data.ownerId
-        && request.resource.data.studentId == resource.data.studentId;
+    function isValidStudentProfile() {
+      return request.auth.token.firebase.sign_in_provider == 'password'
+        && request.resource.data.role == 'student'
+        && request.resource.data.ownerId is string
+        && request.resource.data.studentId is string
+        && request.resource.data.name is string
+        && request.resource.data.email is string
+        && request.resource.data.authEmail == request.auth.token.email
+        && request.resource.data.username is string
+        && request.resource.data.provider == 'password'
+        && request.resource.data.active == true
+        && request.resource.data.mustChangePassword == true
+        && request.resource.data.keys().hasOnly([
+          'role', 'ownerId', 'studentId', 'name', 'email', 'authEmail',
+          'username', 'provider', 'active', 'mustChangePassword',
+          'createdAt', 'updatedAt'
+        ])
+        && exists(userPath(request.resource.data.ownerId))
+        && get(userPath(request.resource.data.ownerId)).data.role == 'teacher'
+        && get(userPath(request.resource.data.ownerId)).data.active == true;
     }
 
     match /mhpUsers/{uid} {
-      allow read: if isSelf(uid)
+      allow get: if isSelf(uid)
         || (signedIn()
           && resource.data.role == 'student'
           && resource.data.ownerId == request.auth.uid
           && isActiveTeacher(request.auth.uid));
+      allow list: if false;
 
       allow create: if isSelf(uid)
-        && (isVerifiedGoogleTeacherProfile()
-          || request.resource.data.role == 'student');
+        && (isVerifiedGoogleTeacherProfile() || isValidStudentProfile());
 
-      allow update: if (isSelf(uid)
-          && request.resource.data.role == resource.data.role
-          && (resource.data.role != 'student'
-            || (resource.data.active == true
-              && request.resource.data.active == true
-              && preservesStudentIdentity()
-              && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['mustChangePassword', 'passwordChangedAt', 'updatedAt']))))
-        || (signedIn()
-          && resource.data.role == 'student'
-          && resource.data.ownerId == request.auth.uid
-          && preservesStudentIdentity()
-          && isActiveTeacher(request.auth.uid));
+      allow update: if isSelf(uid)
+        && resource.data.role == 'teacher'
+        && resource.data.active == true
+        && request.resource.data.role == 'teacher'
+        && request.resource.data.active == true
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'photoURL', 'updatedAt']);
+
+      allow update: if isSelf(uid)
+        && resource.data.role == 'student'
+        && resource.data.active == true
+        && request.resource.data.role == 'student'
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.provider == resource.data.provider
+        && request.resource.data.active == true
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['mustChangePassword', 'passwordChangedAt', 'updatedAt']);
+
+      allow update: if signedIn()
+        && resource.data.role == 'student'
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.role == 'student'
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.provider == resource.data.provider
+        && isActiveTeacher(request.auth.uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'email', 'username', 'active', 'updatedAt']);
 
       allow delete: if false;
     }
 
     match /mhpStudentLoginAliases/{aliasId} {
+      // Alias IDs are SHA-256 hashes. The login screen may fetch one exact
+      // alias before authentication, but collection scans are always denied.
       allow get: if true;
       allow list: if false;
 
-      allow create: if signedIn()
+      allow create: if isActiveTeacher(request.auth.uid)
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.active == true
-        && isActiveTeacher(request.auth.uid);
+        && request.resource.data.keys().hasOnly([
+          'authEmail', 'authUid', 'ownerId', 'studentId', 'active', 'updatedAt'
+        ])
+        && exists(userPath(request.resource.data.authUid))
+        && get(userPath(request.resource.data.authUid)).data.role == 'student'
+        && get(userPath(request.resource.data.authUid)).data.ownerId == request.auth.uid
+        && get(userPath(request.resource.data.authUid)).data.studentId == request.resource.data.studentId;
 
-      allow update: if signedIn()
+      allow update: if isActiveTeacher(request.auth.uid)
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.studentId == resource.data.studentId
         && request.resource.data.authUid == resource.data.authUid
-        && isActiveTeacher(request.auth.uid);
+        && request.resource.data.authEmail == resource.data.authEmail
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['active', 'updatedAt']);
 
-      allow delete: if signedIn()
-        && resource.data.ownerId == request.auth.uid
-        && isActiveTeacher(request.auth.uid);
+      allow delete: if isActiveTeacher(request.auth.uid)
+        && resource.data.ownerId == request.auth.uid;
     }
 
     match /mhpClasses/{ownerId} {
-      allow read, create, update, delete: if isSelf(ownerId) && isActiveTeacher(ownerId);
+      allow get: if isActiveTeacher(ownerId);
+      allow list: if false;
+      allow create: if isActiveTeacher(ownerId)
+        && request.resource.data.ownerId == ownerId
+        && request.resource.data.keys().hasOnly([
+          'ownerId', 'schemaVersion', 'payload', 'createdAt', 'updatedAt'
+        ]);
+      allow update: if isActiveTeacher(ownerId)
+        && resource.data.ownerId == ownerId
+        && request.resource.data.ownerId == ownerId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['schemaVersion', 'payload', 'updatedAt']);
+      allow delete: if isActiveTeacher(ownerId)
+        && resource.data.ownerId == ownerId;
     }
 
     match /mhpStudentViews/{studentUid} {
-      allow read: if isSelf(studentUid)
+      allow get: if studentPasswordChanged(studentUid)
         || (signedIn()
           && resource.data.ownerId == request.auth.uid
           && isActiveTeacher(request.auth.uid));
 
-      allow create: if signedIn()
-        && request.resource.data.ownerId == request.auth.uid
+      allow list: if signedIn()
+        && resource.data.ownerId == request.auth.uid
         && isActiveTeacher(request.auth.uid);
 
-      allow update: if (signedIn()
-          && resource.data.ownerId == request.auth.uid
-          && request.resource.data.ownerId == request.auth.uid
-          && isActiveTeacher(request.auth.uid))
-        || (isSelf(studentUid)
-          && request.resource.data.ownerId == resource.data.ownerId
-          && request.resource.data.studentId == resource.data.studentId
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['studentState', 'activity', 'studentUpdatedAt']));
+      allow create: if isActiveTeacher(request.auth.uid)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.studentId is string
+        && request.resource.data.keys().hasOnly([
+          'ownerId', 'studentId', 'schemaVersion', 'profile',
+          'studentState', 'content', 'updatedAt'
+        ]);
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.studentId == resource.data.studentId
+        && isActiveTeacher(request.auth.uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['schemaVersion', 'profile', 'studentState', 'content', 'updatedAt']);
+
+      allow update: if studentPasswordChanged(studentUid)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.profile == resource.data.profile
+        && request.resource.data.content == resource.data.content
+        && request.resource.data.schemaVersion == resource.data.schemaVersion
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['studentState', 'activity', 'studentUpdatedAt']);
 
       allow delete: if signedIn()
         && resource.data.ownerId == request.auth.uid

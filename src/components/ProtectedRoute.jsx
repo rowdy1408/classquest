@@ -5,7 +5,11 @@ import { useApp } from '../context/AppContext';
 export default function ProtectedRoute({ role, children }) {
   const { authReady, session, currentTeacher, currentStudent } = useApp();
   const location = useLocation();
-  const profilePending = (role === 'student' && session?.role === 'student' && !currentStudent)
+  const passwordSetupOnly = role === 'student'
+    && session?.role === 'student'
+    && session.mustChangePassword
+    && location.pathname === '/student/settings';
+  const profilePending = (role === 'student' && session?.role === 'student' && !currentStudent && !passwordSetupOnly)
     || (role === 'teacher' && session?.role === 'teacher' && !currentTeacher);
   if (!authReady || profilePending) {
     return <div className="route-loader"><span className="brand-mark">CQ</span><strong>Đang khôi phục dữ liệu ClassQuest…</strong></div>;

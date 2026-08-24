@@ -8,3 +8,4 @@ dist/
 .vite/
 firebase/*.rules
 !firebase/firestore.rules
+!firebase/storage.rules

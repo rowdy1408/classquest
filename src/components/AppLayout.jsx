@@ -5,9 +5,9 @@ import { useApp } from '../context/AppContext';
 import CharacterAvatar from './CharacterAvatar';
 
 export default function AppLayout({ title, subtitle, navItems, children, mode }) {
-  const { cloudStatus, logout, currentTeacher, currentStudent, roleCatalog } = useApp();
+  const { cloudStatus, logout, currentTeacher, currentStudent, roleCatalog, session } = useApp();
   const navigate = useNavigate();
-  const user = mode === 'teacher' ? currentTeacher : currentStudent;
+  const user = mode === 'teacher' ? currentTeacher : (currentStudent || session);
 
   const handleLogout = () => {
     const loginRoute = mode === 'teacher' ? '/teacher-login' : '/student-login';

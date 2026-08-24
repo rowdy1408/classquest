@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile(uid) {
+      return firestore.get(/databases/(default)/documents/mhpUsers/$(uid));
+    }
+
+    function isOwnerTeacher(ownerId) {
+      return signedIn()
+        && request.auth.uid == ownerId
+        && profile(ownerId).data.role == 'teacher'
+        && profile(ownerId).data.active == true;
+    }
+
+    function isActiveStudent(ownerId, studentUid) {
+      return signedIn()
+        && request.auth.uid == studentUid
+        && profile(studentUid).data.role == 'student'
+        && profile(studentUid).data.ownerId == ownerId
+        && profile(studentUid).data.active == true
+        && profile(studentUid).data.mustChangePassword == false;
+    }
+
+    match /mhpSubmissions/{ownerId}/{studentUid}/{submissionId}/{fileName} {
+      allow read: if isOwnerTeacher(ownerId)
+        || isActiveStudent(ownerId, studentUid);
+
+      allow create, update: if (isOwnerTeacher(ownerId)
+          || isActiveStudent(ownerId, studentUid))
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      allow delete: if isOwnerTeacher(ownerId)
+        || isActiveStudent(ownerId, studentUid);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

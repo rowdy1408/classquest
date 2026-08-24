@@ -43,6 +43,7 @@ import {
   studentAuthEmail,
   studentLoginAliasId,
 } from '../utils/identity';
+import { submissionStoragePath } from '../utils/submissionStorage';
 
 const USER_COLLECTION = 'mhpUsers';
 const CLASS_COLLECTION = 'mhpClasses';
@@ -311,20 +312,17 @@ export async function changeStudentPassword(currentPassword, nextPassword) {
     passwordChangedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  return user;
 }
 
-function safeStorageSegment(value, fallback) {
-  return String(value || fallback).replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80);
-}
-
-export async function uploadSubmissionImages(ownerKey, submissionId, images = []) {
+export async function uploadSubmissionImages(ownerId, studentUid, submissionId, images = []) {
   return Promise.all(images.map(async (image, index) => {
     if (!image?.dataUrl || !String(image.dataUrl).startsWith('data:')) {
       const { dataUrl, ...storedImage } = image || {};
       return { ...storedImage, url: image?.url || dataUrl || '' };
     }
-    const imageId = safeStorageSegment(image.id, `image-${index + 1}`);
-    const path = `mhpSubmissions/${safeStorageSegment(ownerKey, 'unknown')}/${safeStorageSegment(submissionId, 'submission')}/${imageId}.jpg`;
+    const imageId = image.id || `image-${index + 1}`;
+    const path = submissionStoragePath(ownerId, studentUid, submissionId, imageId);
     const reference = storageRef(firebaseStorage, path);
     await uploadString(reference, image.dataUrl, 'data_url', { contentType: image.type || 'image/jpeg' });
     const url = await getDownloadURL(reference);
@@ -343,10 +341,12 @@ export async function migrateWorkspaceSubmissionImages(ownerId, data) {
   let changed = false;
   const submissions = await Promise.all((data.submissions || []).map(async (submission) => {
     if (!(submission.images || []).some((image) => String(image?.dataUrl || '').startsWith('data:'))) return submission;
+    const studentUid = (data.students || []).find((student) => student.id === submission.studentId)?.authUid;
+    if (!studentUid) return submission;
     changed = true;
     return {
       ...submission,
-      images: await uploadSubmissionImages(`${ownerId}/${submission.studentId}`, submission.id, submission.images),
+      images: await uploadSubmissionImages(ownerId, studentUid, submission.id, submission.images),
     };
   }));
   return changed ? { ...data, submissions } : data;

@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 
 export default function StudentSettingsPage() {
   const { changeStudentPassword, currentStudent, session } = useApp();
+  const account = currentStudent || session;
   const [form, setForm] = useState({ currentPassword: '', nextPassword: '', confirmPassword: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -66,14 +67,13 @@ export default function StudentSettingsPage() {
 
       <aside className="panel account-summary-card">
         <small>TÀI KHOẢN CỦA EM</small>
-        <h3>{currentStudent?.name}</h3>
+        <h3>{account?.name || 'Tài khoản học viên'}</h3>
         <dl>
-          <div><dt>Email</dt><dd>{currentStudent?.email || 'Chưa có'}</dd></div>
-          <div><dt>Tên đăng nhập</dt><dd>{currentStudent?.username}</dd></div>
+          <div><dt>Email</dt><dd>{account?.email || 'Chưa có'}</dd></div>
+          <div><dt>Tên đăng nhập</dt><dd>{account?.username || 'Chưa có'}</dd></div>
         </dl>
         <p>Em có thể dùng một trong hai thông tin trên để đăng nhập sau khi đổi mật khẩu.</p>
       </aside>
     </div>
   );
 }
-

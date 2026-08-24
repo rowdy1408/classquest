@@ -518,7 +518,31 @@ export function AppProvider({ children }) {
       return { ok: false, message: 'Tài khoản học viên chưa được kích hoạt hoặc đã bị khóa.' };
     }
 
+    const nextSession = {
+      role: 'student',
+      userId: profile.studentId,
+      authUid: user.uid,
+      ownerId: profile.ownerId,
+      provider: 'password',
+      name: profile.name || '',
+      email: profile.email || '',
+      username: profile.username || '',
+      // Legacy student profiles may not have this field yet. Treat a missing
+      // flag as password-change-required so shared/default credentials never
+      // unlock class data silently.
+      mustChangePassword: profile.mustChangePassword !== false,
+    };
+
     setCloudStatus('loading');
+    if (nextSession.mustChangePassword) {
+      disconnectCloudWorkspace();
+      cloudOwnerRef.current = profile.ownerId || '';
+      setData(cloneDefault());
+      setSession(nextSession);
+      setCloudStatus('synced');
+      return { ok: true, passwordChangeRequired: true };
+    }
+
     const view = await loadStudentView(user.uid);
     if (!view) return { ok: false, message: 'Hồ sơ học viên chưa sẵn sàng. Giáo viên cần đồng bộ lại tài khoản.' };
 
@@ -529,14 +553,7 @@ export function AppProvider({ children }) {
     lastStudentViewDataRef.current = JSON.stringify(nextData);
     dataRef.current = nextData;
     setData(nextData);
-    setSession({
-      role: 'student',
-      userId: profile.studentId,
-      authUid: user.uid,
-      ownerId: profile.ownerId,
-      provider: 'password',
-      mustChangePassword: profile.mustChangePassword === true,
-    });
+    setSession(nextSession);
 
     studentViewUnsubscribeRef.current = subscribeToStudentView(user.uid, (nextView) => {
       const hydrated = hydrateStudentView(nextView, cloneDefault());
@@ -934,8 +951,9 @@ export function AppProvider({ children }) {
   const changeStudentPassword = async (currentPassword, nextPassword) => {
     if (session?.role !== 'student') return { ok: false, message: 'Chỉ tài khoản học viên mới có thể đổi mật khẩu tại đây.' };
     try {
-      await changeFirebaseStudentPassword(currentPassword, nextPassword);
-      setSession((current) => ({ ...current, mustChangePassword: false }));
+      const user = await changeFirebaseStudentPassword(currentPassword, nextPassword);
+      const activation = await activateStudentUser(user);
+      if (!activation.ok) return activation;
       return { ok: true };
     } catch (error) {
       return { ok: false, message: friendlyFirebaseError(error) };
@@ -1205,7 +1223,7 @@ export function AppProvider({ children }) {
     const submissionId = existing?.id || makeId('submission');
     let uploadedImages;
     try {
-      uploadedImages = await uploadSubmissionImages(session?.authUid || studentId, submissionId, evidence.images || []);
+      uploadedImages = await uploadSubmissionImages(session?.ownerId, session?.authUid, submissionId, evidence.images || []);
     } catch (error) {
       console.warn('Could not upload quest evidence images:', error);
       return { ok: false, message: 'Chưa thể tải hình lên Firebase Storage. Hãy thử lại hoặc nộp bằng đường dẫn.' };

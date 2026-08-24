@@ -15,6 +15,7 @@ import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
 import { armorTiers, getArmorTier, getCharacterSkinCandidates, MAX_CHARACTER_LEVEL, normalizeSkinRole } from '../src/utils/characterSkins.js';
 import { parseClassWorkbook } from '../src/utils/classImport.js';
 import { applyStudentXpChange, normalizeStudentProgress } from '../src/utils/studentProgress.js';
+import { submissionStoragePath } from '../src/utils/submissionStorage.js';
 
 test('student authentication accepts normalized email or username aliases', async () => {
   assert.equal(normalizeUsername('Bảo Nguyễn 01'), 'bao-nguyen-01');
@@ -28,6 +29,13 @@ test('student authentication accepts normalized email or username aliases', asyn
 
 test('all newly provisioned student accounts use the configured default password', () => {
   assert.equal(DEFAULT_STUDENT_PASSWORD, '123456789');
+});
+
+test('submission images use owner and student scoped storage paths', () => {
+  assert.equal(
+    submissionStoragePath('teacher-1', 'student-9', 'quest/01', 'photo 1'),
+    'mhpSubmissions/teacher-1/student-9/quest-01/photo-1.jpg',
+  );
 });
 
 test('overflow XP levels up and carries only the remainder forward', () => {
@@ -71,6 +79,16 @@ test('Firestore rules allow verified Google teachers without an invite collectio
   assert.match(rules, /allow get: if true/);
   assert.match(rules, /allow list: if false/);
   assert.match(rules, /mustChangePassword/);
+  assert.match(rules, /studentPasswordChanged\(studentUid\)/);
+  assert.match(rules, /'active', 'mustChangePassword'/);
+});
+
+test('Storage rules scope evidence images and block students before password change', async () => {
+  const rules = await readFile(new URL('../firebase/storage.rules', import.meta.url), 'utf8');
+  assert.match(rules, /mhpSubmissions\/\{ownerId\}\/\{studentUid\}/);
+  assert.match(rules, /mustChangePassword == false/);
+  assert.match(rules, /request\.resource\.size <= 5 \* 1024 \* 1024/);
+  assert.match(rules, /request\.resource\.contentType\.matches\('image\/\.\*'\)/);
 });
 
 test('meeting dates preserve an exact imported lesson schedule', () => {
