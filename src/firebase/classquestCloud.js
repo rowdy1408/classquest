@@ -26,14 +26,12 @@ import {
   updatePassword,
 } from 'firebase/auth';
 import { deleteApp, initializeApp } from 'firebase/app';
-import { getDownloadURL, ref as storageRef, uploadString } from 'firebase/storage';
 import {
   firebaseAuth,
   firebaseConfig,
   firebaseConfigured,
   firebasePersistenceReady,
   firestore,
-  firebaseStorage,
   googleTeacherProvider,
 } from './firebaseClient';
 import {
@@ -43,7 +41,6 @@ import {
   studentAuthEmail,
   studentLoginAliasId,
 } from '../utils/identity';
-import { submissionStoragePath } from '../utils/submissionStorage';
 
 const USER_COLLECTION = 'mhpUsers';
 const CLASS_COLLECTION = 'mhpClasses';
@@ -313,43 +310,6 @@ export async function changeStudentPassword(currentPassword, nextPassword) {
     updatedAt: serverTimestamp(),
   });
   return user;
-}
-
-export async function uploadSubmissionImages(ownerId, studentUid, submissionId, images = []) {
-  return Promise.all(images.map(async (image, index) => {
-    if (!image?.dataUrl || !String(image.dataUrl).startsWith('data:')) {
-      const { dataUrl, ...storedImage } = image || {};
-      return { ...storedImage, url: image?.url || dataUrl || '' };
-    }
-    const imageId = image.id || `image-${index + 1}`;
-    const path = submissionStoragePath(ownerId, studentUid, submissionId, imageId);
-    const reference = storageRef(firebaseStorage, path);
-    await uploadString(reference, image.dataUrl, 'data_url', { contentType: image.type || 'image/jpeg' });
-    const url = await getDownloadURL(reference);
-    return {
-      id: image.id || imageId,
-      name: image.name || `${imageId}.jpg`,
-      type: image.type || 'image/jpeg',
-      size: Number(image.size || 0),
-      storagePath: path,
-      url,
-    };
-  }));
-}
-
-export async function migrateWorkspaceSubmissionImages(ownerId, data) {
-  let changed = false;
-  const submissions = await Promise.all((data.submissions || []).map(async (submission) => {
-    if (!(submission.images || []).some((image) => String(image?.dataUrl || '').startsWith('data:'))) return submission;
-    const studentUid = (data.students || []).find((student) => student.id === submission.studentId)?.authUid;
-    if (!studentUid) return submission;
-    changed = true;
-    return {
-      ...submission,
-      images: await uploadSubmissionImages(ownerId, studentUid, submission.id, submission.images),
-    };
-  }));
-  return changed ? { ...data, submissions } : data;
 }
 
 export async function deactivateStudentAccount(authUid, ownerId) {

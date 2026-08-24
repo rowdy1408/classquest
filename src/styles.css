@@ -556,15 +556,11 @@ code { background: #edf3ff; color: #385a9e; padding: 4px 7px; border-radius: 7px
 .submission-brief .custom-task-box { background: rgba(255,255,255,.12); color: white; }
 .submission-meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .submission-meta-row span { padding: 7px 9px; border-radius: 8px; background: rgba(255,255,255,.12); font-size: 10px; }
-.evidence-uploader { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px; border: 1px dashed #b8c9e8; border-radius: 12px; background: #f8faff; }
-.evidence-uploader strong, .evidence-uploader small { display: block; }
-.evidence-uploader small { color: var(--muted); margin-top: 4px; font-size: 10px; }
-.upload-button { cursor: pointer; white-space: nowrap; }
-.upload-button input { display: none; }
-.evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.evidence-thumb { margin: 0; padding: 9px; border-radius: 12px; border: 1px solid var(--border); background: #f8faff; }
-.evidence-thumb img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; background: #e8eef8; }
-.evidence-thumb figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 7px 0; color: #536482; font-size: 10px; }
+.submission-form > .external-evidence-card { display: flex; flex-direction: row; align-items: flex-start; gap: 11px; padding: 13px; border: 1px solid #b8c9e8; border-radius: 12px; background: #f8faff; cursor: pointer; }
+.external-evidence-card input { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--blue); }
+.external-evidence-card span { display: grid; gap: 4px; }
+.external-evidence-card small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.external-evidence-card.selected { border-color: #59b88a; background: #eefaf4; }
 
 /* Teacher submission review */
 .submission-review { display: grid; gap: 16px; }
@@ -576,19 +572,17 @@ code { background: #edf3ff; color: #385a9e; padding: 4px 7px; border-radius: 7px
 .submission-review section { display: grid; gap: 8px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; }
 .evidence-link { display: inline-flex; width: fit-content; color: var(--blue); font-weight: 800; padding: 9px 11px; border-radius: 9px; background: #eaf1ff; }
 .response-paper { margin: 0; white-space: pre-wrap; line-height: 1.65; color: #445673; }
-.review-image-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
-.review-image-grid a { display: grid; gap: 6px; padding: 8px; border-radius: 10px; background: #f6f9ff; border: 1px solid var(--border); }
-.review-image-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 7px; }
-.review-image-grid span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 9px; }
+.external-evidence-confirmation { border-color: #b9e6cf !important; background: #eefaf4; }
+.external-evidence-confirmation p { margin: 0; color: #287454; }
 
 @media (max-width: 1000px) {
   .class-summary-grid { grid-template-columns: repeat(2, 1fr); }
   .test-date-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 620px) {
-  .class-summary-grid, .test-date-grid, .evidence-grid, .review-image-grid, .review-heading { grid-template-columns: 1fr; }
+  .class-summary-grid, .test-date-grid, .review-heading { grid-template-columns: 1fr; }
   .class-heading-badges { justify-content: flex-start; }
-  .schedule-preset-row, .evidence-uploader { align-items: stretch; flex-direction: column; }
+  .schedule-preset-row { align-items: stretch; flex-direction: column; }
   .button-row.wrap { justify-content: flex-start; }
 }
 

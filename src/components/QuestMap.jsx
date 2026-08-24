@@ -20,9 +20,11 @@ const statusLabels = {
 };
 
 const evidenceLabels = {
-  'Google link, image, or text': 'Đường dẫn, hình ảnh hoặc văn bản',
+  'Google link, external message, or text': 'Đường dẫn, gửi ngoài hoặc văn bản',
+  'Google link, image, or text': 'Đường dẫn, gửi ngoài hoặc văn bản',
   'Google link only': 'Chỉ đường dẫn',
-  'Evidence image only': 'Chỉ hình ảnh',
+  'External message evidence': 'Gửi qua Zalo/ứng dụng khác',
+  'Evidence image only': 'Gửi qua Zalo/ứng dụng khác',
   'Written response only': 'Chỉ câu trả lời viết',
   'Teacher-scored test evidence': 'Bài kiểm tra do giáo viên chấm',
 };

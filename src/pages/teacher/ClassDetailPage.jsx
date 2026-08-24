@@ -250,12 +250,12 @@ function SubmissionsTab({ submissions, students, nodes, onReview }) {
   return (
     <>
       <div className="panel">
-        <div className="panel-header"><div><small>DUYỆT NHIỆM VỤ</small><h2>Bài nộp của học viên</h2><p>Mở từng bài để kiểm tra đường dẫn, câu trả lời và hình ảnh minh chứng.</p></div></div>
+        <div className="panel-header"><div><small>DUYỆT NHIỆM VỤ</small><h2>Bài nộp của học viên</h2><p>Mở từng bài để kiểm tra đường dẫn, câu trả lời và xác nhận gửi minh chứng qua ứng dụng khác.</p></div></div>
         <div className="table-wrap"><table><thead><tr><th>Học viên</th><th>Nhiệm vụ</th><th>Thời gian nộp</th><th>Minh chứng</th><th>Trạng thái</th><th>Duyệt</th></tr></thead><tbody>
           {submissions.map((submission) => {
             const student = students.find((item) => item.id === submission.studentId);
             const node = nodes.find((item) => item.id === submission.nodeId);
-            const evidenceCount = Number(Boolean(submission.workLink)) + Number(Boolean(submission.responseText)) + Number(submission.images?.length || 0);
+            const evidenceCount = Number(Boolean(submission.workLink)) + Number(Boolean(submission.responseText)) + Number(Boolean(submission.externalEvidenceSent));
             return <tr key={submission.id}><td><div className="student-cell"><CharacterAvatar student={student} className="teacher-table-avatar" /><strong>{student?.name}</strong></div></td><td>{node?.title}</td><td>{new Date(submission.submittedAt).toLocaleString('vi-VN')}</td><td>{evidenceCount} mục</td><td><span className={`status-tag ${submission.status}`}>{submission.status}</span></td><td><button className="mini-button" onClick={() => openSubmission(submission)}>Xem & duyệt</button></td></tr>;
           })}
         </tbody></table></div>
@@ -273,8 +273,8 @@ function SubmissionsTab({ submissions, students, nodes, onReview }) {
               {selected.workLink && <section><small>ĐƯỜNG DẪN BÀI LÀM</small><a className="evidence-link" href={selected.workLink} target="_blank" rel="noreferrer">Mở đường dẫn đã nộp ↗</a></section>}
               {selected.responseText && <section><small>CÂU TRẢ LỜI</small><p className="response-paper">{selected.responseText}</p></section>}
               {selected.studentNote && <section><small>GHI CHÚ CỦA HỌC VIÊN</small><p>{selected.studentNote}</p></section>}
-              {selected.images?.length > 0 && <section><small>HÌNH ẢNH MINH CHỨNG</small><div className="review-image-grid">{selected.images.map((image) => <a key={image.id} href={image.url || image.dataUrl} target="_blank" rel="noreferrer"><img src={image.url || image.dataUrl} alt={image.name} loading="lazy" /><span>{image.name}</span></a>)}</div></section>}
-              {!selected.workLink && !selected.responseText && !selected.images?.length && <div className="empty-state compact">Bài nộp này chưa có minh chứng.</div>}
+              {selected.externalEvidenceSent && <section className="external-evidence-confirmation"><small>MINH CHỨNG GỬI NGOÀI CLASSQUEST</small><p>Học viên xác nhận đã gửi qua {selected.externalEvidenceNote || 'Zalo, Messenger hoặc ứng dụng khác'}.</p></section>}
+              {!selected.workLink && !selected.responseText && !selected.externalEvidenceSent && <div className="empty-state compact">Bài nộp này chưa có minh chứng.</div>}
 
               <label><span>Nhận xét của giáo viên</span><textarea rows="4" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Nêu phần đã đạt hoặc nội dung cần sửa." /></label>
               <div className="form-actions"><button className="button warning" onClick={() => review('revision')}>Yêu cầu chỉnh sửa</button><button className="button success" onClick={() => review('approved')}><Check size={16} /> Duyệt bài</button></div>
@@ -309,7 +309,7 @@ function ClassModal({ modal, setModal, classId, students, roleCatalog, app, edit
       description: '',
       assignmentInstructions: '',
       customPrompt: '',
-      acceptedEvidence: 'Google link, image, or text',
+      acceptedEvidence: 'Google link, external message, or text',
       lockAfterDeadline: true,
       submissionLocked: false,
       testId: '',
@@ -323,7 +323,7 @@ function ClassModal({ modal, setModal, classId, students, roleCatalog, app, edit
       ['date','Ngày học / nhiệm vụ','date'],
       ['deadline','Hạn nộp bài','datetime-local'],
       ['status','Quyền truy cập','select',[{ value: 'locked', label: 'Đã khóa' }, { value: 'available', label: 'Đang mở' }, { value: 'completed', label: 'Đã hoàn thành' }]],
-      ['acceptedEvidence','Minh chứng chấp nhận','select',[{ value: 'Google link, image, or text', label: 'Đường dẫn, hình ảnh hoặc văn bản' }, { value: 'Google link only', label: 'Chỉ đường dẫn' }, { value: 'Evidence image only', label: 'Chỉ hình ảnh' }, { value: 'Written response only', label: 'Chỉ câu trả lời viết' }, { value: 'Teacher-scored test evidence', label: 'Bài kiểm tra do giáo viên chấm' }]],
+      ['acceptedEvidence','Minh chứng chấp nhận','select',[{ value: 'Google link, external message, or text', label: 'Đường dẫn, gửi qua Zalo/ứng dụng khác hoặc văn bản' }, { value: 'Google link only', label: 'Chỉ đường dẫn' }, { value: 'External message evidence', label: 'Gửi qua Zalo/ứng dụng khác' }, { value: 'Written response only', label: 'Chỉ câu trả lời viết' }, { value: 'Teacher-scored test evidence', label: 'Bài kiểm tra do giáo viên chấm' }]],
       ['xpReward','XP thưởng','number'],
       ['goldReward','Gold thưởng','number'],
       ['description','Tóm tắt nhiệm vụ','textarea'],

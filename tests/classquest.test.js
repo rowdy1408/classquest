@@ -15,7 +15,6 @@ import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
 import { armorTiers, getArmorTier, getCharacterSkinCandidates, MAX_CHARACTER_LEVEL, normalizeSkinRole } from '../src/utils/characterSkins.js';
 import { parseClassWorkbook } from '../src/utils/classImport.js';
 import { applyStudentXpChange, normalizeStudentProgress } from '../src/utils/studentProgress.js';
-import { submissionStoragePath } from '../src/utils/submissionStorage.js';
 
 test('student authentication accepts normalized email or username aliases', async () => {
   assert.equal(normalizeUsername('Bảo Nguyễn 01'), 'bao-nguyen-01');
@@ -29,13 +28,6 @@ test('student authentication accepts normalized email or username aliases', asyn
 
 test('all newly provisioned student accounts use the configured default password', () => {
   assert.equal(DEFAULT_STUDENT_PASSWORD, '123456789');
-});
-
-test('submission images use owner and student scoped storage paths', () => {
-  assert.equal(
-    submissionStoragePath('teacher-1', 'student-9', 'quest/01', 'photo 1'),
-    'mhpSubmissions/teacher-1/student-9/quest-01/photo-1.jpg',
-  );
 });
 
 test('overflow XP levels up and carries only the remainder forward', () => {
@@ -83,12 +75,19 @@ test('Firestore rules allow verified Google teachers without an invite collectio
   assert.match(rules, /'active', 'mustChangePassword'/);
 });
 
-test('Storage rules scope evidence images and block students before password change', async () => {
-  const rules = await readFile(new URL('../firebase/storage.rules', import.meta.url), 'utf8');
-  assert.match(rules, /mhpSubmissions\/\{ownerId\}\/\{studentUid\}/);
-  assert.match(rules, /mustChangePassword == false/);
-  assert.match(rules, /request\.resource\.size <= 5 \* 1024 \* 1024/);
-  assert.match(rules, /request\.resource\.contentType\.matches\('image\/\.\*'\)/);
+test('external evidence flow does not require Firebase Storage', async () => {
+  const [firebaseClient, submissionModal, firebaseConfig, deployWorkflow] = await Promise.all([
+    readFile(new URL('../src/firebase/firebaseClient.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/QuestSubmissionModal.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../firebase.json', import.meta.url), 'utf8'),
+    readFile(new URL('../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8'),
+  ]);
+  assert.doesNotMatch(firebaseClient, /firebase\/storage|getStorage|VITE_FIREBASE_STORAGE_BUCKET/);
+  assert.doesNotMatch(firebaseConfig, /"storage"/);
+  assert.doesNotMatch(deployWorkflow, /VITE_FIREBASE_STORAGE_BUCKET/);
+  assert.match(submissionModal, /externalEvidenceSent/);
+  assert.match(submissionModal, /Zalo/);
+  assert.doesNotMatch(submissionModal, /type="file"/);
 });
 
 test('meeting dates preserve an exact imported lesson schedule', () => {

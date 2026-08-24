@@ -19,7 +19,7 @@ export default function StudentQuestMapPage() {
           <div>
             <small>HÀNH TRÌNH CỦA EM</small>
             <h2>Bản đồ nhiệm vụ</h2>
-            <p>Chọn một node để đọc yêu cầu, xem hạn nộp và gửi bài làm hoặc hình ảnh minh chứng.</p>
+            <p>Chọn một node để đọc yêu cầu, xem hạn nộp và gửi bài làm hoặc xác nhận đã gửi minh chứng qua Zalo/ứng dụng khác.</p>
           </div>
         </div>
         <QuestMap

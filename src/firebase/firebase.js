@@ -24,7 +24,6 @@ const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
@@ -127,24 +126,13 @@ export async function ensureTeacherWorkspace(user) {
   return { id: user.uid, ...profile };
 }
 
-function cloudSafeItems(key, items) {
-  if (key !== 'submissions') return items || [];
-
-  // Base64 evidence is intentionally kept out of Firestore. It can exceed the
-  // Firestore document limit and will move to Firebase Storage when student
-  // accounts are migrated to Firebase Auth.
-  return (items || []).map((submission) => ({
-    ...submission,
-    images: (submission.images || [])
-      .filter((image) => image.downloadURL)
-      .map(({ dataUrl, ...image }) => image),
-    localEvidenceImageCount: (submission.images || []).filter((image) => image.dataUrl && !image.downloadURL).length,
-  }));
+function cloudSafeItems(items) {
+  return items || [];
 }
 
 export function cloudDataFingerprint(data) {
   return JSON.stringify(workspaceDataKeys.reduce((result, key) => {
-    result[key] = cloudSafeItems(key, data?.[key]);
+    result[key] = cloudSafeItems(data?.[key]);
     return result;
   }, {}));
 }
@@ -184,7 +172,7 @@ export async function writeWorkspaceData(workspaceId, data) {
   workspaceDataKeys.forEach((key) => {
     const storageRef = doc(firestoreDb, 'classquestWorkspaces', workspaceId, 'storage', key);
     batch.set(storageRef, {
-      items: cloudSafeItems(key, data?.[key]),
+      items: cloudSafeItems(data?.[key]),
       schemaVersion: 1,
       updatedAt: serverTimestamp(),
     });

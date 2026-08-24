@@ -17,7 +17,6 @@ import {
   getUserProfile,
   loadStudentView,
   loadOrCreateTeacherWorkspace,
-  migrateWorkspaceSubmissionImages,
   observeFirebaseUser,
   provisionStudentAccount,
   saveStudentActivity,
@@ -30,13 +29,19 @@ import {
   subscribeToTeacherWorkspace,
   syncStudentLoginAliases,
   syncStudentViews,
-  uploadSubmissionImages,
 } from '../firebase/classquestCloud';
 
 const AppContext = createContext(null);
 
 const makeId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const cloneDefault = () => JSON.parse(JSON.stringify(defaultData));
+const DEFAULT_ACCEPTED_EVIDENCE = 'Google link, external message, or text';
+
+function normalizeAcceptedEvidence(value) {
+  if (!value || value === 'Google link, image, or text') return DEFAULT_ACCEPTED_EVIDENCE;
+  if (value === 'Evidence image only') return 'External message evidence';
+  return value;
+}
 
 function usernameBase(value) {
   return String(value || 'student')
@@ -160,25 +165,30 @@ function normalizeData(raw, fallback) {
     questNodes: (source.questNodes || []).map((node) => ({
       assignmentInstructions: node.description || '',
       customPrompt: '',
-      acceptedEvidence: 'Google link, image, or text',
       deadline: '',
       lockAfterDeadline: false,
       submissionLocked: false,
       ...node,
+      acceptedEvidence: normalizeAcceptedEvidence(node.acceptedEvidence),
     })),
     pointLogs: source.pointLogs || [],
     shopItems: migratedShopItems,
     purchases: (source.purchases || []).map((purchase) => ({ lastUsedAt: '', ...purchase })),
     skillUses: source.skillUses || [],
-    submissions: (source.submissions || []).map((submission) => ({
-      workLink: '',
-      responseText: '',
-      studentNote: '',
-      images: [],
-      teacherFeedback: '',
-      attemptCount: 1,
-      ...submission,
-    })),
+    submissions: (source.submissions || []).map((submission) => {
+      const safeSubmission = { ...submission };
+      delete safeSubmission.images;
+      return {
+        workLink: '',
+        responseText: '',
+        studentNote: '',
+        externalEvidenceSent: false,
+        externalEvidenceNote: '',
+        teacherFeedback: '',
+        attemptCount: 1,
+        ...safeSubmission,
+      };
+    }),
   };
 }
 
@@ -309,7 +319,7 @@ function createLessonNode(classId, order, date) {
     description: `Session ${order} learning quest.`,
     assignmentInstructions: '',
     customPrompt: '',
-    acceptedEvidence: 'Google link, image, or text',
+    acceptedEvidence: DEFAULT_ACCEPTED_EVIDENCE,
     deadline: '',
     lockAfterDeadline: true,
     submissionLocked: false,
@@ -445,12 +455,7 @@ export function AppProvider({ children }) {
     setCloudStatus('loading');
     const remotePayload = await loadOrCreateTeacherWorkspace(user, sanitizeWorkspaceData(dataRef.current));
     const fallback = cloneDefault();
-    let normalized = syncAllClassQuestMaps(normalizeData(remotePayload, fallback));
-    try {
-      normalized = await migrateWorkspaceSubmissionImages(user.uid, normalized);
-    } catch (error) {
-      console.warn('Could not migrate legacy submission images to Firebase Storage:', error);
-    }
+    const normalized = syncAllClassQuestMaps(normalizeData(remotePayload, fallback));
     const teacherRecord = {
       id: user.uid,
       name: profile.name || user.displayName || user.email,
@@ -1049,7 +1054,7 @@ export function AppProvider({ children }) {
       goldReward: 10,
       assignmentInstructions: '',
       customPrompt: '',
-      acceptedEvidence: 'Google link, image, or text',
+      acceptedEvidence: DEFAULT_ACCEPTED_EVIDENCE,
       deadline: '',
       lockAfterDeadline: true,
       submissionLocked: false,
@@ -1216,19 +1221,18 @@ export function AppProvider({ children }) {
       return { ok: false, message: `Đã quá hạn nộp bài: ${new Date(node.deadline).toLocaleString('vi-VN')}.` };
     }
 
-    const hasEvidence = evidence.workLink?.trim() || evidence.responseText?.trim() || evidence.images?.length;
-    if (!hasEvidence) return { ok: false, message: 'Hãy thêm đường dẫn, câu trả lời hoặc hình ảnh minh chứng.' };
+    const hasEvidence = evidence.workLink?.trim() || evidence.responseText?.trim() || evidence.externalEvidenceSent;
+    if (!hasEvidence) return { ok: false, message: 'Hãy thêm đường dẫn, câu trả lời hoặc xác nhận đã gửi minh chứng qua Zalo/ứng dụng khác.' };
 
     const existing = data.submissions.find((item) => item.studentId === studentId && item.nodeId === nodeId);
     const submissionId = existing?.id || makeId('submission');
-    let uploadedImages;
-    try {
-      uploadedImages = await uploadSubmissionImages(session?.ownerId, session?.authUid, submissionId, evidence.images || []);
-    } catch (error) {
-      console.warn('Could not upload quest evidence images:', error);
-      return { ok: false, message: 'Chưa thể tải hình lên Firebase Storage. Hãy thử lại hoặc nộp bằng đường dẫn.' };
-    }
-    const storedEvidence = { ...evidence, images: uploadedImages };
+    const storedEvidence = {
+      workLink: String(evidence.workLink || '').trim(),
+      responseText: String(evidence.responseText || '').trim(),
+      studentNote: String(evidence.studentNote || '').trim(),
+      externalEvidenceSent: Boolean(evidence.externalEvidenceSent),
+      externalEvidenceNote: evidence.externalEvidenceSent ? String(evidence.externalEvidenceNote || '').trim() : '',
+    };
 
     setData((current) => {
       const existing = current.submissions.find((item) => item.studentId === studentId && item.nodeId === nodeId);
@@ -1263,14 +1267,15 @@ export function AppProvider({ children }) {
             workLink: storedEvidence.workLink || '',
             responseText: storedEvidence.responseText || '',
             studentNote: storedEvidence.studentNote || '',
-            images: storedEvidence.images || [],
+            externalEvidenceSent: storedEvidence.externalEvidenceSent,
+            externalEvidenceNote: storedEvidence.externalEvidenceNote,
             teacherFeedback: '',
             attemptCount: 1,
           },
         ],
       };
     });
-    return { ok: true, message: 'Quest evidence submitted.' };
+    return { ok: true, message: 'Đã gửi bài nộp.' };
   };
 
   const reviewSubmission = (submissionId, status, teacherFeedback = '') => {

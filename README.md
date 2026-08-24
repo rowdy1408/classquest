@@ -12,6 +12,7 @@ ClassQuest là website quản lý lớp học theo phong cách RPG, gồm cổng
 - Đã kèm bộ skin nhân vật trong `public/assets/skins`.
 - Dùng Hash Router và đường dẫn asset tương đối để chạy ổn trên GitHub Pages.
 - Có GitHub Actions tự build và deploy sau mỗi lần push lên nhánh `main`.
+- Không cần Firebase Storage trả phí: học viên có thể nộp đường dẫn/văn bản hoặc xác nhận đã gửi minh chứng qua Zalo, Messenger hay ứng dụng khác.
 
 ## Chạy trên máy
 
@@ -23,15 +24,15 @@ npm install
 npm run dev
 ```
 
-Điền sáu biến `VITE_FIREBASE_*` trong `.env.local` trước khi đăng nhập. File `.env.local` đã được chặn bởi `.gitignore` và không được commit.
+Điền năm biến `VITE_FIREBASE_*` trong `.env.local` trước khi đăng nhập. File `.env.local` đã được chặn bởi `.gitignore` và không được commit.
 
 ## Chuẩn bị Firebase
 
 1. Bật Google và Email/Password trong Firebase Authentication.
 2. Thêm domain GitHub Pages vào Authentication → Settings → Authorized domains.
 3. Publish `firebase/firestore.rules`. Rules này cho phép mọi tài khoản Google đã xác minh tự tạo workspace giáo viên riêng, không cần danh sách lời mời.
-4. Publish `firebase/storage.rules` trước khi bật nộp bài bằng hình ảnh. Ảnh được giới hạn theo giáo viên/học viên sở hữu, chỉ nhận định dạng ảnh và tối đa 5 MB sau khi xử lý.
-5. Với học viên cũ chưa có tài khoản online, nhấn **Kích hoạt**. Tài khoản mới dùng mật khẩu mặc định `123456789` và phải đổi ngay trong lần đăng nhập đầu.
+4. Với học viên cũ chưa có tài khoản online, nhấn **Kích hoạt**. Tài khoản mới dùng mật khẩu mặc định `123456789` và phải đổi ngay trong lần đăng nhập đầu.
+5. Khi bài làm nằm ngoài ClassQuest, học viên đánh dấu đã gửi minh chứng qua Zalo/ứng dụng khác; giáo viên sẽ thấy xác nhận này trong mục duyệt bài.
 
 Nếu Firebase project đang dùng chung với ứng dụng khác, không ghi đè toàn bộ Firestore Rules. Hãy ghép các block `mhp*` vào bộ rules hiện hành rồi kiểm thử tất cả ứng dụng trước khi publish.
 
@@ -44,15 +45,14 @@ Trong repository GitHub:
    - `VITE_FIREBASE_API_KEY`
    - `VITE_FIREBASE_AUTH_DOMAIN`
    - `VITE_FIREBASE_PROJECT_ID`
-   - `VITE_FIREBASE_STORAGE_BUCKET`
    - `VITE_FIREBASE_MESSAGING_SENDER_ID`
    - `VITE_FIREBASE_APP_ID`
 3. Vào Settings → Pages và chọn Source là **GitHub Actions**.
 4. Push lên nhánh `main`. Workflow `Deploy ClassQuest to GitHub Pages` sẽ build và xuất bản website.
 
-Firebase Web API key sẽ xuất hiện trong bundle chạy trên trình duyệt theo thiết kế của Firebase; an toàn dữ liệu phụ thuộc vào Authentication, Firestore Rules và Storage Rules. Không đưa service-account key hoặc Admin SDK secret vào repository hay GitHub Pages.
+Firebase Web API key sẽ xuất hiện trong bundle chạy trên trình duyệt theo thiết kế của Firebase; an toàn dữ liệu phụ thuộc vào Authentication và Firestore Rules. Không đưa service-account key hoặc Admin SDK secret vào repository hay GitHub Pages.
 
-Có thể publish Rules bằng Firebase CLI: `firebase deploy --only firestore:rules,storage`.
+Có thể publish Rules bằng Firebase CLI: `firebase deploy --only firestore:rules`.
 
 ## Dữ liệu và quyền truy cập
 
@@ -75,4 +75,4 @@ npm ci
 npm run check
 ```
 
-Không commit `.env.local`, `node_modules`, `dist`, service-account JSON, file xuất dữ liệu Firebase hoặc ảnh/bài nộp riêng của học viên.
+Không commit `.env.local`, `node_modules`, `dist`, service-account JSON hoặc file xuất dữ liệu Firebase.
