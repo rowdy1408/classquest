@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { BookOpenCheck, CircleUserRound, Coins, Home, School, ScrollText, ShoppingBag, Sparkles, Swords, Users } from './icons';
+import { CircleUserRound, Coins, Home, School, ScrollText, Settings, ShoppingBag, Sparkles, Swords, Users } from './icons';
 import AppLayout from './components/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
@@ -17,6 +17,7 @@ import StudentProfilePage from './pages/student/StudentProfilePage';
 import StudentQuestMapPage from './pages/student/StudentQuestMapPage';
 import StudentShopPage from './pages/student/StudentShopPage';
 import StudentSkillTreePage from './pages/student/StudentSkillTreePage';
+import StudentSettingsPage from './pages/student/StudentSettingsPage';
 
 const teacherNav = [
   { to: '/teacher', label: 'Tổng quan', icon: Home, end: true },
@@ -32,6 +33,7 @@ const studentNav = [
   { to: '/student/skills', label: 'Cây kỹ năng', icon: Sparkles },
   { to: '/student/group', label: 'Biệt đội', icon: Users },
   { to: '/student/shop', label: 'Cửa hàng', icon: Coins },
+  { to: '/student/settings', label: 'Cài đặt', icon: Settings },
 ];
 
 function TeacherShell({ children, title, subtitle }) {
@@ -61,6 +63,7 @@ export default function App() {
       <Route path="/student/skills" element={<StudentShell title="Cây kỹ năng" subtitle="Mở khóa năng lực mới khi nhân vật lên cấp."><StudentSkillTreePage /></StudentShell>} />
       <Route path="/student/group" element={<StudentShell title="Biệt đội của em" subtitle="Xem đồng đội và tiến độ của cả nhóm."><StudentGroupPage /></StudentShell>} />
       <Route path="/student/shop" element={<StudentShell title="Cửa hàng kỹ năng" subtitle="Dùng Gold để mua kỹ năng được giáo viên phê duyệt."><StudentShopPage /></StudentShell>} />
+      <Route path="/student/settings" element={<StudentShell title="Cài đặt tài khoản" subtitle="Quản lý mật khẩu đăng nhập của em."><StudentSettingsPage /></StudentShell>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

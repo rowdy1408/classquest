@@ -13,5 +13,8 @@ export default function ProtectedRoute({ role, children }) {
   if (!session || session.role !== role) {
     return <Navigate to={role === 'teacher' ? '/teacher-login' : '/student-login'} replace state={{ from: location.pathname }} />;
   }
+  if (role === 'student' && session.mustChangePassword && location.pathname !== '/student/settings') {
+    return <Navigate to="/student/settings" replace />;
+  }
   return children;
 }

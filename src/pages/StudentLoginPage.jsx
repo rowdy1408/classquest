@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 export default function StudentLoginPage() {
   const { loginStudent } = useApp();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -15,7 +15,7 @@ export default function StudentLoginPage() {
     event.preventDefault();
     setError('');
     setBusy(true);
-    const result = await loginStudent(username, password);
+    const result = await loginStudent(identifier, password);
     setBusy(false);
     if (result.ok) navigate('/student');
     else setError(result.message);
@@ -29,8 +29,8 @@ export default function StudentLoginPage() {
         <small>TÀI KHOẢN HỌC VIÊN</small>
         <h1>Đăng nhập học viên</h1>
         <p>Tiếp tục nhiệm vụ và phát triển nhân vật của em.</p>
-        <label><span><UserRound size={16} /> Tên đăng nhập</span><input value={username} onChange={(event) => setUsername(event.target.value)} required /></label>
-        <label><span><KeyRound size={16} /> Mật khẩu</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required /></label>
+        <label><span><UserRound size={16} /> Email hoặc tên đăng nhập</span><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="alex@example.com hoặc student1" autoComplete="username" required /></label>
+        <label><span><KeyRound size={16} /> Mật khẩu</span><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required /></label>
         {error && <div className="error-message">{error}</div>}
         <button className="button primary full" type="submit" disabled={busy}>{busy ? 'Đang đăng nhập…' : 'Vào hành trình của em'}</button>
       </form>

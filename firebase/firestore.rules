@@ -46,7 +46,9 @@ service cloud.firestore {
           && (resource.data.role != 'student'
             || (resource.data.active == true
               && request.resource.data.active == true
-              && preservesStudentIdentity())))
+              && preservesStudentIdentity()
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['mustChangePassword', 'passwordChangedAt', 'updatedAt']))))
         || (signedIn()
           && resource.data.role == 'student'
           && resource.data.ownerId == request.auth.uid
@@ -54,6 +56,27 @@ service cloud.firestore {
           && isActiveTeacher(request.auth.uid));
 
       allow delete: if false;
+    }
+
+    match /mhpStudentLoginAliases/{aliasId} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.active == true
+        && isActiveTeacher(request.auth.uid);
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.authUid == resource.data.authUid
+        && isActiveTeacher(request.auth.uid);
+
+      allow delete: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && isActiveTeacher(request.auth.uid);
     }
 
     match /mhpClasses/{ownerId} {

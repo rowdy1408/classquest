@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getFirestore,
@@ -13,13 +14,16 @@ import {
 } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
   getAuth,
   inMemoryPersistence,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
 } from 'firebase/auth';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { getDownloadURL, ref as storageRef, uploadString } from 'firebase/storage';
@@ -32,11 +36,18 @@ import {
   firebaseStorage,
   googleTeacherProvider,
 } from './firebaseClient';
-import { normalizeUsername, scopedStudentUsername, studentAuthEmail } from '../utils/identity';
+import {
+  normalizeStudentLoginIdentifier,
+  normalizeUsername,
+  scopedStudentUsername,
+  studentAuthEmail,
+  studentLoginAliasId,
+} from '../utils/identity';
 
 const USER_COLLECTION = 'mhpUsers';
 const CLASS_COLLECTION = 'mhpClasses';
 const STUDENT_VIEW_COLLECTION = 'mhpStudentViews';
+const STUDENT_LOGIN_ALIAS_COLLECTION = 'mhpStudentLoginAliases';
 const SCHEMA_VERSION = 2;
 
 function cleanPayload(value) {
@@ -119,10 +130,25 @@ export async function signOutFirebaseUser() {
   await signOut(firebaseAuth);
 }
 
-export async function signInStudentWithPassword(username, password) {
+async function resolveStudentAuthEmail(identifier) {
+  const normalized = normalizeStudentLoginIdentifier(identifier);
+  if (!normalized) throw new Error('Vui lòng nhập email hoặc tên đăng nhập.');
+
+  const aliasSnapshot = await getDoc(doc(firestore, STUDENT_LOGIN_ALIAS_COLLECTION, await studentLoginAliasId(normalized)));
+  if (aliasSnapshot.exists() && aliasSnapshot.data()?.active === true && aliasSnapshot.data()?.authEmail) {
+    return aliasSnapshot.data().authEmail;
+  }
+
+  if (!normalized.includes('@')) return studentAuthEmail(normalized);
+  const error = new Error('Email hoặc tên đăng nhập chưa đúng.');
+  error.code = 'auth/invalid-credential';
+  throw error;
+}
+
+export async function signInStudentWithPassword(identifier, password) {
   if (!firebaseConfigured) throw new Error('Firebase chưa được cấu hình. Hãy liên hệ giáo viên.');
   await firebasePersistenceReady;
-  const email = studentAuthEmail(username);
+  const email = await resolveStudentAuthEmail(identifier);
   const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
   const profile = await getUserProfile(credential.user);
   if (!profile || profile.role !== 'student' || profile.active !== true) {
@@ -132,8 +158,62 @@ export async function signInStudentWithPassword(username, password) {
   return { user: credential.user, profile };
 }
 
+function studentAliasPayload(ownerId, student) {
+  return {
+    authEmail: student.authEmail || studentAuthEmail(student.username),
+    authUid: student.authUid,
+    ownerId,
+    studentId: student.id,
+    active: true,
+    updatedAt: serverTimestamp(),
+  };
+}
+
+export async function syncStudentLoginAliases(ownerId, students = []) {
+  const activeStudents = students.filter((student) => student?.authUid && student?.username);
+  for (let offset = 0; offset < activeStudents.length; offset += 180) {
+    const batch = writeBatch(firestore);
+    const group = activeStudents.slice(offset, offset + 180);
+    for (const student of group) {
+      const identifiers = [...new Set([student.username, student.email]
+        .map(normalizeStudentLoginIdentifier)
+        .filter(Boolean))];
+      const payload = studentAliasPayload(ownerId, student);
+      for (const identifier of identifiers) {
+        const aliasId = await studentLoginAliasId(identifier);
+        batch.set(doc(firestore, STUDENT_LOGIN_ALIAS_COLLECTION, aliasId), payload, { merge: true });
+      }
+    }
+    await batch.commit();
+  }
+}
+
+export async function deleteStudentLoginAliases(ownerId, student) {
+  const identifiers = [...new Set([student?.username, student?.email]
+    .map(normalizeStudentLoginIdentifier)
+    .filter(Boolean))];
+  await Promise.all(identifiers.map(async (identifier) => {
+    const reference = doc(firestore, STUDENT_LOGIN_ALIAS_COLLECTION, await studentLoginAliasId(identifier));
+    const snapshot = await getDoc(reference);
+    if (snapshot.exists() && snapshot.data()?.ownerId === ownerId) await deleteDoc(reference);
+  }));
+}
+
+async function assertStudentEmailAliasAvailable(ownerId, student) {
+  const email = normalizeStudentLoginIdentifier(student.email);
+  if (!email) return;
+  const aliasSnapshot = await getDoc(doc(firestore, STUDENT_LOGIN_ALIAS_COLLECTION, await studentLoginAliasId(email)));
+  if (!aliasSnapshot.exists()) return;
+  const alias = aliasSnapshot.data();
+  if (alias.ownerId === ownerId && alias.studentId === student.id) return;
+  const error = new Error('Email đăng nhập này đã được dùng cho một tài khoản học viên khác.');
+  error.code = 'auth/student-login-alias-collision';
+  throw error;
+}
+
 export async function provisionStudentAccount(ownerId, student, password) {
   if (!firebaseConfigured) throw new Error('Firebase chưa được cấu hình.');
+  await assertStudentEmailAliasAvailable(ownerId, student);
   const secondaryName = `classquest-student-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const secondaryApp = initializeApp(firebaseConfig, secondaryName);
   const secondaryAuth = getAuth(secondaryApp);
@@ -194,6 +274,7 @@ export async function provisionStudentAccount(ownerId, student, password) {
         username,
         provider: 'password',
         active: true,
+        mustChangePassword: existingData?.mustChangePassword ?? true,
         ...(existingProfile.exists() ? {} : { createdAt: serverTimestamp() }),
         updatedAt: serverTimestamp(),
       }, { merge: existingProfile.exists() });
@@ -208,6 +289,28 @@ export async function provisionStudentAccount(ownerId, student, password) {
     try { await signOut(secondaryAuth); } catch { /* no active secondary session */ }
     await deleteApp(secondaryApp);
   }
+}
+
+export async function changeStudentPassword(currentPassword, nextPassword) {
+  const user = firebaseAuth.currentUser;
+  if (!user?.email) throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  try {
+    await reauthenticateWithCredential(user, credential);
+  } catch (error) {
+    if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password') {
+      const currentPasswordError = new Error('Mật khẩu hiện tại chưa đúng.');
+      currentPasswordError.code = 'auth/current-password-invalid';
+      throw currentPasswordError;
+    }
+    throw error;
+  }
+  await updatePassword(user, nextPassword);
+  await updateDoc(teacherProfileRef(user.uid), {
+    mustChangePassword: false,
+    passwordChangedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 function safeStorageSegment(value, fallback) {
@@ -351,9 +454,13 @@ export function friendlyFirebaseError(error) {
   if (code === 'auth/popup-blocked') return 'Your browser blocked the Google sign-in window. Allow pop-ups and try again.';
   if (code === 'auth/cancelled-popup-request') return 'Another sign-in window is already open.';
   if (code === 'auth/unauthorized-domain') return 'Tên miền website chưa được thêm vào danh sách Authorized domains của Firebase.';
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'Tên đăng nhập hoặc mật khẩu chưa đúng.';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'Email, tên đăng nhập hoặc mật khẩu chưa đúng.';
+  if (code === 'auth/current-password-invalid') return 'Mật khẩu hiện tại chưa đúng.';
+  if (code === 'auth/weak-password') return 'Mật khẩu mới chưa đủ mạnh. Hãy dùng ít nhất 8 ký tự.';
+  if (code === 'auth/too-many-requests') return 'Bạn đã thử quá nhiều lần. Vui lòng chờ một lúc rồi thử lại.';
   if (code === 'auth/email-already-in-use') return 'Email nội bộ này đã tồn tại nhưng mật khẩu không khớp. Hãy tạo mã tài khoản khác.';
   if (code === 'auth/student-username-collision') return error.message;
+  if (code === 'auth/student-login-alias-collision') return error.message;
   if (code === 'auth/operation-not-allowed') return 'Firebase chưa bật phương thức đăng nhập Email/Password.';
   if (code === 'permission-denied' || code === 'firestore/permission-denied') {
     return 'Firebase Rules hiện chưa cho phép thao tác này. Hãy cập nhật Rules mới của ClassQuest rồi thử lại.';

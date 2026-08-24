@@ -1,17 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeUsername, scopedStudentUsername, studentAuthEmail } from '../src/utils/identity.js';
+import {
+  normalizeStudentLoginIdentifier,
+  normalizeUsername,
+  scopedStudentUsername,
+  studentAuthEmail,
+  studentLoginAliasId,
+} from '../src/utils/identity.js';
+import { DEFAULT_STUDENT_PASSWORD } from '../src/constants/studentAuth.js';
 import { validateTestSchedule } from '../src/utils/classValidation.js';
 import { buildMeetingDates, orderQuestNodes } from '../src/utils/questSchedule.js';
 import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
 import { armorTiers, getArmorTier, getCharacterSkinCandidates, MAX_CHARACTER_LEVEL, normalizeSkinRole } from '../src/utils/characterSkins.js';
 import { parseClassWorkbook } from '../src/utils/classImport.js';
 
-test('student authentication always derives from username', () => {
+test('student authentication accepts normalized email or username aliases', async () => {
   assert.equal(normalizeUsername('Bảo Nguyễn 01'), 'bao-nguyen-01');
   assert.equal(studentAuthEmail('Bao-01'), 'bao-01@classquest.local');
+  assert.equal(normalizeStudentLoginIdentifier(' Alex@Example.COM '), 'alex@example.com');
+  assert.equal(normalizeStudentLoginIdentifier(' Bảo Nguyễn 01 '), 'bao-nguyen-01');
+  assert.equal(await studentLoginAliasId('Alex@Example.com'), await studentLoginAliasId('alex@example.com'));
+  assert.equal((await studentLoginAliasId('student1')).length, 64);
   assert.throws(() => studentAuthEmail('   '));
+});
+
+test('all newly provisioned student accounts use the configured default password', () => {
+  assert.equal(DEFAULT_STUDENT_PASSWORD, '123456789');
 });
 
 test('student usernames can be scoped safely to separate teacher workspaces', () => {
@@ -28,6 +43,10 @@ test('Firestore rules allow verified Google teachers without an invite collectio
   assert.doesNotMatch(rules, /mhpTeacherInvites/);
   assert.match(rules, /sign_in_provider == 'google.com'/);
   assert.match(rules, /match \/mhpClasses\/\{ownerId\}/);
+  assert.match(rules, /match \/mhpStudentLoginAliases\/\{aliasId\}/);
+  assert.match(rules, /allow get: if true/);
+  assert.match(rules, /allow list: if false/);
+  assert.match(rules, /mustChangePassword/);
 });
 
 test('meeting dates preserve an exact imported lesson schedule', () => {

@@ -4,10 +4,13 @@ import { tierRequiredLevels } from '../data/skillTreeData';
 import { makeStarterRules, STARTER_CONTENT_VERSION, starterShopItems } from '../data/starterContent';
 import { loadAppData, loadSession, resetStorage, saveAppData, saveSession } from '../utils/storage';
 import { MAX_CHARACTER_LEVEL } from '../utils/characterSkins';
+import { DEFAULT_STUDENT_PASSWORD } from '../constants/studentAuth';
 import { buildMeetingDates, orderQuestNodes } from '../utils/questSchedule';
 import { sortTests, validateTestSchedule } from '../utils/classValidation';
 import {
   deactivateStudentAccount,
+  deleteStudentLoginAliases,
+  changeStudentPassword as changeFirebaseStudentPassword,
   ensureTeacherProfile,
   friendlyFirebaseError,
   getUserProfile,
@@ -24,6 +27,7 @@ import {
   subscribeToStudentView,
   subscribeToTeacherStudentViews,
   subscribeToTeacherWorkspace,
+  syncStudentLoginAliases,
   syncStudentViews,
   uploadSubmissionImages,
 } from '../firebase/classquestCloud';
@@ -218,10 +222,14 @@ function buildStudentViews(ownerId, data) {
     const peerIds = new Set((data.students || []).filter((peer) => (peer.classIds || []).some((id) => classIds.includes(id))).map((peer) => peer.id));
     const publicPeer = (peer) => {
       const safe = withoutCredentials(peer);
-      const { email, username, note, authUid, ...visible } = safe;
+      const { email, username, note, authUid, authEmail, ...visible } = safe;
       return visible;
     };
-    const profile = publicPeer(student);
+    const profile = {
+      ...publicPeer(student),
+      email: student.email || '',
+      username: student.username || '',
+    };
     return {
       authUid: student.authUid,
       studentId: student.id,
@@ -484,6 +492,11 @@ export function AppProvider({ children }) {
     setSession({ role: 'teacher', userId: user.uid, provider: 'google.com' });
     await saveTeacherWorkspace(user.uid, nextData);
     await syncStudentViews(user.uid, buildStudentViews(user.uid, sanitizeWorkspaceData(nextData)));
+    try {
+      await syncStudentLoginAliases(user.uid, nextData.students);
+    } catch (error) {
+      console.warn('Could not synchronize student login aliases:', error);
+    }
 
     cloudUnsubscribeRef.current = subscribeToTeacherWorkspace(user.uid, (payload) => {
       const latest = syncAllClassQuestMaps(normalizeData(payload, cloneDefault()));
@@ -536,7 +549,14 @@ export function AppProvider({ children }) {
     lastStudentViewDataRef.current = JSON.stringify(nextData);
     dataRef.current = nextData;
     setData(nextData);
-    setSession({ role: 'student', userId: profile.studentId, authUid: user.uid, ownerId: profile.ownerId, provider: 'password' });
+    setSession({
+      role: 'student',
+      userId: profile.studentId,
+      authUid: user.uid,
+      ownerId: profile.ownerId,
+      provider: 'password',
+      mustChangePassword: profile.mustChangePassword === true,
+    });
 
     studentViewUnsubscribeRef.current = subscribeToStudentView(user.uid, (nextView) => {
       const hydrated = hydrateStudentView(nextView, cloneDefault());
@@ -601,6 +621,7 @@ export function AppProvider({ children }) {
         const safeData = sanitizeWorkspaceData(data);
         await saveTeacherWorkspace(ownerId, safeData);
         await syncStudentViews(ownerId, buildStudentViews(ownerId, safeData));
+        await syncStudentLoginAliases(ownerId, safeData.students);
         setCloudStatus('synced');
       } catch (error) {
         console.warn('Could not save ClassQuest data to Firestore:', error);
@@ -664,11 +685,11 @@ export function AppProvider({ children }) {
     }
   };
 
-  const loginStudent = async (username, password) => {
+  const loginStudent = async (identifier, password) => {
     setAuthReady(false);
     setCloudStatus('loading');
     try {
-      const { user, profile } = await signInStudentWithPassword(username, password);
+      const { user, profile } = await signInStudentWithPassword(identifier, password);
       const result = await activateStudentUser(user, profile);
       setAuthReady(true);
       return result;
@@ -814,7 +835,10 @@ export function AppProvider({ children }) {
   const deleteClass = async (classId) => {
     const orphanedStudents = data.students.filter((student) => student.classIds.includes(classId) && student.classIds.length === 1);
     try {
-      await Promise.all(orphanedStudents.filter((student) => student.authUid).map((student) => deactivateStudentAccount(student.authUid, session.userId)));
+      await Promise.all(orphanedStudents.filter((student) => student.authUid).map(async (student) => {
+        await deactivateStudentAccount(student.authUid, session.userId);
+        await deleteStudentLoginAliases(session.userId, student);
+      }));
     } catch (error) {
       return { ok: false, message: friendlyFirebaseError(error) };
     }
@@ -843,8 +867,7 @@ export function AppProvider({ children }) {
   const addStudent = async (payload) => {
     const role = roleCatalog[payload.role] ?? roleCatalog.Explorer;
     const startingLevel = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(payload.level) || 1));
-    const { password, ...safePayload } = payload;
-    if (!password || password.length < 8) return { ok: false, message: 'Mật khẩu tạm cần có ít nhất 8 ký tự.' };
+    const safePayload = withoutCredentials(payload);
     const created = {
       id: makeId('student'),
       avatar: role.icon,
@@ -861,8 +884,9 @@ export function AppProvider({ children }) {
       xpToNext: Math.max(100, startingLevel * 100),
     };
     try {
-      const account = await provisionStudentAccount(session.userId, created, password);
-      const cloudStudent = { ...created, username: account.username, authUid: account.authUid };
+      const account = await provisionStudentAccount(session.userId, created, DEFAULT_STUDENT_PASSWORD);
+      const cloudStudent = { ...created, username: account.username, authUid: account.authUid, authEmail: account.authEmail };
+      await syncStudentLoginAliases(session.userId, [cloudStudent]);
       updateCollection('students', (items) => [...items, cloudStudent]);
       return { ok: true, student: cloudStudent };
     } catch (error) {
@@ -870,17 +894,23 @@ export function AppProvider({ children }) {
     }
   };
 
-  const activateStudentAccount = async (studentId, temporaryPassword) => {
+  const activateStudentAccount = async (studentId) => {
     const student = data.students.find((item) => item.id === studentId);
     if (!student) return { ok: false, message: 'Không tìm thấy học viên.' };
     if (student.authUid) return { ok: true, student };
-    if (!temporaryPassword || temporaryPassword.length < 8) return { ok: false, message: 'Mật khẩu tạm cần có ít nhất 8 ký tự.' };
     try {
-      const account = await provisionStudentAccount(session.userId, student, temporaryPassword);
+      const account = await provisionStudentAccount(session.userId, student, DEFAULT_STUDENT_PASSWORD);
+      const activatedStudent = {
+        ...withoutCredentials(student),
+        username: account.username,
+        authUid: account.authUid,
+        authEmail: account.authEmail,
+      };
+      await syncStudentLoginAliases(session.userId, [activatedStudent]);
       updateCollection('students', (items) => items.map((item) => item.id === studentId
-        ? { ...withoutCredentials(item), username: account.username, authUid: account.authUid }
+        ? activatedStudent
         : item));
-      return { ok: true, student: { ...withoutCredentials(student), username: account.username, authUid: account.authUid } };
+      return { ok: true, student: activatedStudent };
     } catch (error) {
       return { ok: false, message: friendlyFirebaseError(error) };
     }
@@ -889,19 +919,19 @@ export function AppProvider({ children }) {
   const updateStudent = async (studentId, patch) => {
     const target = data.students.find((student) => student.id === studentId);
     if (!target) return { ok: false, message: 'Không tìm thấy học viên.' };
-    const { password, ...profilePatch } = patch || {};
-    const safePatch = withoutCredentials(profilePatch);
+    const safePatch = withoutCredentials(patch);
     if (target?.authUid) {
       delete safePatch.email;
       delete safePatch.username;
     }
     let account = null;
     if (!target.authUid) {
-      if (!password || password.length < 8) return { ok: false, message: 'Mật khẩu tạm cần có ít nhất 8 ký tự.' };
       try {
-        account = await provisionStudentAccount(session.userId, { ...withoutCredentials(target), ...safePatch }, password);
+        account = await provisionStudentAccount(session.userId, { ...withoutCredentials(target), ...safePatch }, DEFAULT_STUDENT_PASSWORD);
         safePatch.username = account.username;
         safePatch.authUid = account.authUid;
+        safePatch.authEmail = account.authEmail;
+        await syncStudentLoginAliases(session.userId, [{ ...withoutCredentials(target), ...safePatch }]);
       } catch (error) {
         return { ok: false, message: friendlyFirebaseError(error) };
       }
@@ -921,11 +951,23 @@ export function AppProvider({ children }) {
     return { ok: true, student: { ...withoutCredentials(target), ...safePatch }, accountCreated: Boolean(account) };
   };
 
+  const changeStudentPassword = async (currentPassword, nextPassword) => {
+    if (session?.role !== 'student') return { ok: false, message: 'Chỉ tài khoản học viên mới có thể đổi mật khẩu tại đây.' };
+    try {
+      await changeFirebaseStudentPassword(currentPassword, nextPassword);
+      setSession((current) => ({ ...current, mustChangePassword: false }));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: friendlyFirebaseError(error) };
+    }
+  };
+
   const deleteStudent = async (studentId) => {
     const student = data.students.find((item) => item.id === studentId);
     if (student?.authUid) {
       try {
         await deactivateStudentAccount(student.authUid, session.userId);
+        await deleteStudentLoginAliases(session.userId, student);
       } catch (error) {
         return { ok: false, message: friendlyFirebaseError(error) };
       }
@@ -1255,6 +1297,7 @@ export function AppProvider({ children }) {
       roleCatalog,
       loginTeacherWithGoogle,
       loginStudent,
+      changeStudentPassword,
       logout,
       resetDemo,
       addClass,

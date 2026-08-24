@@ -1,0 +1,2 @@
+export const DEFAULT_STUDENT_PASSWORD = '123456789';
+

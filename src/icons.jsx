@@ -6,7 +6,7 @@ const glyphs = {
   Mail: '✉', KeyRound: '🔑', ArrowLeft: '←', UserRound: '●', CalendarDays: '▦', CheckCircle2: '✓',
   Coins: '◉', School: '🏫', ScrollText: '▤', ShieldAlert: '⚠', Users: '👥', ChevronRight: '›', Edit3: '✎',
   Save: '▣', Power: '⏻', ShoppingBag: '🛍', PackageOpen: '◫', CircleUserRound: '◉', Home: '⌂', BookOpenCheck: '▥',
-  Upload: '⇧', HelpCircle: '?', Download: '⇩', FileSpreadsheet: '▦'
+  Upload: '⇧', HelpCircle: '?', Download: '⇩', FileSpreadsheet: '▦', Settings: '⚙'
 };
 
 function makeIcon(name) {
@@ -55,3 +55,4 @@ export const Upload = makeIcon('Upload');
 export const HelpCircle = makeIcon('HelpCircle');
 export const Download = makeIcon('Download');
 export const FileSpreadsheet = makeIcon('FileSpreadsheet');
+export const Settings = makeIcon('Settings');

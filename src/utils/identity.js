@@ -23,3 +23,17 @@ export function studentAuthEmail(username) {
   if (!normalized) throw new Error('Tên đăng nhập học viên chưa hợp lệ.');
   return `${normalized}@classquest.local`;
 }
+
+export function normalizeStudentLoginIdentifier(value) {
+  const identifier = String(value || '').trim().toLowerCase();
+  if (!identifier) return '';
+  return identifier.includes('@') ? identifier : normalizeUsername(identifier);
+}
+
+export async function studentLoginAliasId(identifier) {
+  const normalized = normalizeStudentLoginIdentifier(identifier);
+  if (!normalized) throw new Error('Email hoặc tên đăng nhập chưa hợp lệ.');
+  const bytes = new TextEncoder().encode(normalized);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}

@@ -8,6 +8,7 @@ import CharacterAvatar from '../../components/CharacterAvatar';
 import { useApp } from '../../context/AppContext';
 import { sortTests } from '../../utils/classValidation';
 import { MAX_CHARACTER_LEVEL } from '../../utils/characterSkins';
+import { DEFAULT_STUDENT_PASSWORD } from '../../constants/studentAuth';
 
 const tabs = [
   ['Overview', 'Tổng quan'],
@@ -20,13 +21,6 @@ const tabs = [
   ['Submissions', 'Bài nộp'],
 ];
 const dayLabels = { Monday: '2', Tuesday: '3', Wednesday: '4', Thursday: '5', Friday: '6', Saturday: '7', Sunday: 'CN' };
-function createTemporaryPassword() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const values = new Uint32Array(12);
-  window.crypto.getRandomValues(values);
-  return Array.from(values, (value) => alphabet[value % alphabet.length]).join('');
-}
-
 function createStudentCredentials(students = []) {
   const existingEmails = new Set(students.map((student) => student.email?.toLowerCase()).filter(Boolean));
   const existingUsernames = new Set(students.map((student) => student.username?.toLowerCase()).filter(Boolean));
@@ -36,12 +30,12 @@ function createStudentCredentials(students = []) {
     const username = `student-${token}`;
     const email = `${username}@classquest.local`;
     if (!existingEmails.has(email) && !existingUsernames.has(username)) {
-      return { email, username, password: createTemporaryPassword() };
+      return { email, username };
     }
   }
 
   const fallback = `student-${Date.now().toString(36)}`;
-  return { email: `${fallback}@classquest.local`, username: fallback, password: createTemporaryPassword() };
+  return { email: `${fallback}@classquest.local`, username: fallback };
 }
 
 function formatDate(value) {
@@ -170,16 +164,12 @@ function StudentsTab({ students, roleCatalog, onAdd, onEdit, onActivate, onDelet
   const [message, setMessage] = useState('');
 
   const activate = async (student) => {
-    const temporaryPassword = window.prompt(
-      `Nhập mật khẩu tạm cho ${student.name}. Hãy sao chép và gửi riêng cho học viên.`,
-      createTemporaryPassword(),
-    );
-    if (!temporaryPassword) return;
+    if (!window.confirm(`Kích hoạt ${student.name} với mật khẩu mặc định ${DEFAULT_STUDENT_PASSWORD}?`)) return;
     setBusyId(student.id);
     setMessage('');
-    const result = await onActivate(student.id, temporaryPassword);
+    const result = await onActivate(student.id);
     setBusyId('');
-    setMessage(result.ok ? `Đã kích hoạt đăng nhập online cho ${student.name}. Hãy gửi riêng mật khẩu tạm vừa chọn.` : result.message);
+    setMessage(result.ok ? `Đã kích hoạt ${student.name}. Học viên có thể đăng nhập bằng email hoặc tên tài khoản với mật khẩu mặc định ${DEFAULT_STUDENT_PASSWORD}.` : result.message);
   };
 
   const remove = async (student) => {
@@ -387,11 +377,11 @@ function StudentFormModal({ open, onClose, editingStudent, students, roleCatalog
             {!editingStudent && <button className="button secondary compact" type="button" onClick={regenerate}><RotateCcw size={15} /> Tạo mã khác</button>}
           </div>
           <div className="generated-account-grid">
-            <label><span>Email nội bộ ClassQuest</span><input type="email" value={form.email || ''} onChange={(event) => setForm({ ...form, email: event.target.value })} readOnly={!editingStudent || Boolean(editingStudent?.authUid)} required /></label>
-            <label><span>Tên đăng nhập</span><input value={form.username || ''} onChange={(event) => setForm({ ...form, username: event.target.value })} readOnly={!editingStudent || Boolean(editingStudent?.authUid)} required /></label>
-            {!editingStudent?.authUid && <label className="span-2"><span>Mật khẩu tạm</span><input value={form.password || ''} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength="8" required /></label>}
+            <label><span>Email đăng nhập</span><input type="email" value={form.email || ''} onChange={(event) => setForm({ ...form, email: event.target.value })} readOnly={Boolean(editingStudent?.authUid)} required /></label>
+            <label><span>Tên đăng nhập</span><input value={form.username || ''} onChange={(event) => setForm({ ...form, username: event.target.value })} readOnly={Boolean(editingStudent?.authUid)} required /></label>
+            {!editingStudent?.authUid && <label className="span-2"><span>Mật khẩu mặc định</span><input value={DEFAULT_STUDENT_PASSWORD} readOnly /></label>}
           </div>
-          {!editingStudent?.authUid && <p>Mật khẩu này sẽ tạo tài khoản Firebase để học viên đăng nhập từ mọi thiết bị. Nếu tên đăng nhập đã tồn tại, ClassQuest sẽ tự tạo một tên riêng cho lớp.</p>}
+          {!editingStudent?.authUid && <p>Học viên có thể dùng email hoặc tên tài khoản để đăng nhập. Lần đăng nhập đầu tiên sẽ yêu cầu đổi mật khẩu mặc định.</p>}
           {editingStudent?.authUid && <p>Tài khoản online đã được kích hoạt. Email và tên đăng nhập được khóa để giữ đúng liên kết Firebase.</p>}
         </div>
 
