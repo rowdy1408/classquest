@@ -14,6 +14,7 @@ import { buildMeetingDates, orderQuestNodes } from '../src/utils/questSchedule.j
 import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
 import { armorTiers, getArmorTier, getCharacterSkinCandidates, MAX_CHARACTER_LEVEL, normalizeSkinRole } from '../src/utils/characterSkins.js';
 import { parseClassWorkbook } from '../src/utils/classImport.js';
+import { applyStudentXpChange, normalizeStudentProgress } from '../src/utils/studentProgress.js';
 
 test('student authentication accepts normalized email or username aliases', async () => {
   assert.equal(normalizeUsername('Bảo Nguyễn 01'), 'bao-nguyen-01');
@@ -27,6 +28,29 @@ test('student authentication accepts normalized email or username aliases', asyn
 
 test('all newly provisioned student accounts use the configured default password', () => {
   assert.equal(DEFAULT_STUDENT_PASSWORD, '123456789');
+});
+
+test('overflow XP levels up and carries only the remainder forward', () => {
+  assert.deepEqual(
+    normalizeStudentProgress({ level: 8, xp: 810, xpToNext: 800 }),
+    { level: 9, xp: 10, xpToNext: 900 },
+  );
+  assert.deepEqual(
+    applyStudentXpChange({ level: 8, xp: 790, xpToNext: 800 }, 25),
+    { level: 9, xp: 15, xpToNext: 900 },
+  );
+  assert.deepEqual(
+    normalizeStudentProgress({ level: 8, xp: 1700, xpToNext: 800 }),
+    { level: 10, xp: 0, xpToNext: 1000 },
+  );
+  assert.deepEqual(
+    applyStudentXpChange({ level: 8, xp: 10, xpToNext: 800 }, -50),
+    { level: 8, xp: 0, xpToNext: 800 },
+  );
+  assert.deepEqual(
+    normalizeStudentProgress({ level: 40, xp: 1200, xpToNext: 1000 }),
+    { level: 40, xp: 1000, xpToNext: 1000 },
+  );
 });
 
 test('student usernames can be scoped safely to separate teacher workspaces', () => {

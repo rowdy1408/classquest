@@ -4,6 +4,7 @@ import { tierRequiredLevels } from '../data/skillTreeData';
 import { makeStarterRules, STARTER_CONTENT_VERSION, starterShopItems } from '../data/starterContent';
 import { loadAppData, loadSession, resetStorage, saveAppData, saveSession } from '../utils/storage';
 import { MAX_CHARACTER_LEVEL } from '../utils/characterSkins';
+import { applyStudentXpChange, normalizeStudentProgress } from '../utils/studentProgress';
 import { DEFAULT_STUDENT_PASSWORD } from '../constants/studentAuth';
 import { buildMeetingDates, orderQuestNodes } from '../utils/questSchedule';
 import { sortTests, validateTestSchedule } from '../utils/classValidation';
@@ -114,26 +115,6 @@ function countSkillUses(entries, studentId, skill, now = new Date()) {
   }).length;
 }
 
-function applyXpChange(student, change) {
-  const amount = Number(change || 0);
-  let level = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(student.level) || 1));
-  let xp = Math.max(0, Number(student.xp || 0) + amount);
-  let xpToNext = Math.max(100, Number(student.xpToNext) || level * 100);
-
-  while (amount > 0 && level < MAX_CHARACTER_LEVEL && xp >= xpToNext) {
-    xp -= xpToNext;
-    level += 1;
-    xpToNext += 100;
-  }
-
-  if (level >= MAX_CHARACTER_LEVEL) {
-    level = MAX_CHARACTER_LEVEL;
-    xp = Math.min(xp, xpToNext);
-  }
-
-  return { ...student, level, xp, xpToNext };
-}
-
 function normalizeData(raw, fallback) {
   const source = raw && typeof raw === 'object' ? raw : fallback;
   const classes = (source.classes || []).map((klass) => ({ sessionCount: 16, meetingSlots: [], sessionDates: [], ...klass }));
@@ -166,8 +147,7 @@ function normalizeData(raw, fallback) {
       const level = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Number(student.level) || 1));
       const validSkillIds = new Set(role.skills.map((skill) => skill.id));
       return {
-        ...student,
-        level,
+        ...normalizeStudentProgress({ ...student, level }, MAX_CHARACTER_LEVEL),
         hp: Math.min(Number(student.hp ?? role.maxHp), role.maxHp),
         mana: Math.min(Number(student.mana ?? role.maxMana), role.maxMana),
         unlockedSkillIds: (Array.isArray(student.unlockedSkillIds) ? student.unlockedSkillIds : []).filter((id) => validSkillIds.has(id)),
@@ -1098,7 +1078,7 @@ export function AppProvider({ children }) {
       ...current,
       students: current.students.map((student) => {
         if (student.id !== studentId) return student;
-        const progressed = applyXpChange(student, Number(points || 0));
+        const progressed = applyStudentXpChange(student, Number(points || 0), MAX_CHARACTER_LEVEL);
         return { ...progressed, gold: Math.max(0, Number(student.gold || 0) + Number(gold || 0)) };
       }),
       pointLogs: [
