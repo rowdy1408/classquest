@@ -1,24 +1,25 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { resolveProtectedRoute } from '../utils/protectedRoute';
 
 export default function ProtectedRoute({ role, children }) {
   const { authReady, session, currentTeacher, currentStudent } = useApp();
   const location = useLocation();
-  const passwordSetupOnly = role === 'student'
-    && session?.role === 'student'
-    && session.mustChangePassword
-    && location.pathname === '/student/settings';
-  const profilePending = (role === 'student' && session?.role === 'student' && !currentStudent && !passwordSetupOnly)
-    || (role === 'teacher' && session?.role === 'teacher' && !currentTeacher);
-  if (!authReady || profilePending) {
+  const hasProfile = role === 'student' ? Boolean(currentStudent) : Boolean(currentTeacher);
+  const routeState = resolveProtectedRoute({
+    authReady,
+    expectedRole: role,
+    session,
+    hasProfile,
+    pathname: location.pathname,
+  });
+
+  if (routeState.state === 'loading') {
     return <div className="route-loader"><span className="brand-mark">CQ</span><strong>Đang khôi phục dữ liệu ClassQuest…</strong></div>;
   }
-  if (!session || session.role !== role) {
-    return <Navigate to={role === 'teacher' ? '/teacher-login' : '/student-login'} replace state={{ from: location.pathname }} />;
-  }
-  if (role === 'student' && session.mustChangePassword && location.pathname !== '/student/settings') {
-    return <Navigate to="/student/settings" replace />;
+  if (routeState.state === 'redirect') {
+    return <Navigate to={routeState.to} replace state={{ from: location.pathname }} />;
   }
   return children;
 }

@@ -15,6 +15,7 @@ import { skillTrees, tierRequiredLevels } from '../src/data/skillTreeData.js';
 import { armorTiers, getArmorTier, getCharacterSkinCandidates, MAX_CHARACTER_LEVEL, normalizeSkinRole } from '../src/utils/characterSkins.js';
 import { parseClassWorkbook } from '../src/utils/classImport.js';
 import { applyStudentXpChange, normalizeStudentProgress } from '../src/utils/studentProgress.js';
+import { resolveProtectedRoute } from '../src/utils/protectedRoute.js';
 
 test('student authentication accepts normalized email or username aliases', async () => {
   assert.equal(normalizeUsername('Bảo Nguyễn 01'), 'bao-nguyen-01');
@@ -28,6 +29,30 @@ test('student authentication accepts normalized email or username aliases', asyn
 
 test('all newly provisioned student accounts use the configured default password', () => {
   assert.equal(DEFAULT_STUDENT_PASSWORD, '123456789');
+});
+
+test('first student login reaches password settings before the private profile is loaded', () => {
+  const session = { role: 'student', mustChangePassword: true };
+  assert.deepEqual(
+    resolveProtectedRoute({
+      authReady: true,
+      expectedRole: 'student',
+      session,
+      hasProfile: false,
+      pathname: '/student',
+    }),
+    { state: 'redirect', to: '/student/settings' },
+  );
+  assert.deepEqual(
+    resolveProtectedRoute({
+      authReady: true,
+      expectedRole: 'student',
+      session,
+      hasProfile: false,
+      pathname: '/student/settings',
+    }),
+    { state: 'allow' },
+  );
 });
 
 test('overflow XP levels up and carries only the remainder forward', () => {
