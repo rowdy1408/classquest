@@ -31,6 +31,13 @@ test('all newly provisioned student accounts use the configured default password
   assert.equal(DEFAULT_STUDENT_PASSWORD, '123456789');
 });
 
+test('teacher student form always shows the default password notice', async () => {
+  const source = await readFile(new URL('../src/pages/teacher/ClassDetailPage.jsx', import.meta.url), 'utf8');
+  assert.match(source, /Mật khẩu mặc định:/);
+  assert.match(source, /<code>\{DEFAULT_STUDENT_PASSWORD\}<\/code>/);
+  assert.match(source, /Nếu học viên đã đổi mật khẩu/);
+});
+
 test('first student login reaches password settings before the private profile is loaded', () => {
   const session = { role: 'student', mustChangePassword: true };
   assert.deepEqual(

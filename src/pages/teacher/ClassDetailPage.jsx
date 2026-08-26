@@ -381,6 +381,10 @@ function StudentFormModal({ open, onClose, editingStudent, students, roleCatalog
             <label><span>Tên đăng nhập</span><input value={form.username || ''} onChange={(event) => setForm({ ...form, username: event.target.value })} readOnly={Boolean(editingStudent?.authUid)} required /></label>
             {!editingStudent?.authUid && <label className="span-2"><span>Mật khẩu mặc định</span><input value={DEFAULT_STUDENT_PASSWORD} readOnly /></label>}
           </div>
+          <div className="default-password-notice" role="note">
+            <strong>Mật khẩu mặc định: <code>{DEFAULT_STUDENT_PASSWORD}</code></strong>
+            <span>Nếu học viên đã đổi mật khẩu sau lần đăng nhập đầu tiên, hãy sử dụng mật khẩu mới.</span>
+          </div>
           {!editingStudent?.authUid && <p>Học viên có thể dùng email hoặc tên tài khoản để đăng nhập. Lần đăng nhập đầu tiên sẽ yêu cầu đổi mật khẩu mặc định.</p>}
           {editingStudent?.authUid && <p>Tài khoản online đã được kích hoạt. Email và tên đăng nhập được khóa để giữ đúng liên kết Firebase.</p>}
         </div>
